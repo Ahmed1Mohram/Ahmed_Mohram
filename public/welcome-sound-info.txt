@@ -1,0 +1,24 @@
+Welcome Sound Instructions
+===========================
+
+Please add a welcome sound file named "welcome-sound.mp3" to this public directory.
+
+The sound should be:
+- A professional, elegant welcome chime or tone
+- Duration: 2-3 seconds
+- Format: MP3
+- Volume: Moderate (will be played at 50% volume)
+
+Recommended sound characteristics:
+- Luxurious and sophisticated
+- Gold/premium feeling
+- Smooth fade in/out
+- Not too loud or jarring
+
+You can find royalty-free premium sounds at:
+- Freesound.org
+- Zapsplat.com
+- Mixkit.co
+- YouTube Audio Library
+
+Search for: "luxury chime", "golden bell", "premium notification", "elegant intro"

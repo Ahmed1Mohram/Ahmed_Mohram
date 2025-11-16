@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>دخول المسؤول السريع</title>
+    <style>
+        body { 
+            background: #000; 
+            color: #FFD700; 
+            font-family: Arial; 
+            text-align: center; 
+            padding: 50px; 
+        }
+        .btn { 
+            background: #FFD700; 
+            color: #000; 
+            padding: 20px 40px; 
+            font-size: 20px; 
+            border: none; 
+            border-radius: 10px; 
+            margin: 20px; 
+            cursor: pointer; 
+        }
+        .btn:hover { background: #FFA500; }
+    </style>
+</head>
+<body>
+    <h1>🛡️ دخول المسؤول السريع</h1>
+    <p>اختر طريقة الدخول:</p>
+    
+    <button class="btn" onclick="goToPort3000()">المنفذ 3000</button>
+    <button class="btn" onclick="goToPort3001()">المنفذ 3001</button>
+    <button class="btn" onclick="goToPort3002()">المنفذ 3002</button>
+    
+    <script>
+        function setAdmin() {
+            localStorage.setItem('isAdmin', 'true');
+            localStorage.setItem('adminOverride', 'true');
+            localStorage.setItem('user', JSON.stringify({
+                id: 'quick-admin',
+                email: 'admin@quick.com',
+                role: 'admin',
+                full_name: 'مسؤول سريع'
+            }));
+        }
+        
+        function goToPort3000() {
+            setAdmin();
+            alert('تم تعيين الأذونات! اضغط OK للانتقال...');
+            setTimeout(() => {
+                window.open('http://localhost:3000/super-admin', '_blank');
+            }, 500);
+        }
+        
+        function goToPort3001() {
+            setAdmin();
+            alert('تم تعيين الأذونات! اضغط OK للانتقال...');
+            setTimeout(() => {
+                window.open('http://localhost:3001/super-admin', '_blank');
+            }, 500);
+        }
+        
+        function goToPort3002() {
+            setAdmin();
+            alert('تم تعيين الأذونات! اضغط OK للانتقال...');
+            setTimeout(() => {
+                window.open('http://localhost:3002/super-admin', '_blank');
+            }, 500);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الامتحانات الإلكترونية</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Notification Animation */
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        
+        /* Prevent text selection on double tap */
+        
+        * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* Allow text selection for inputs */
+        
+        input,
+        textarea {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Cairo', 'Tajawal', sans-serif;
+            min-height: 100vh;
+            background: radial-gradient(ellipse at top, #667eea 0%, #764ba2 50%, #2d1b47 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+        
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+                radial-gradient(circle at 90% 80%, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+            background-size: 60px 60px, 80px 80px, 100px 100px;
+            animation: starfield 120s linear infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        @keyframes starfield {
+            from { transform: translateY(0); }
+            to { transform: translateY(-100px); }
+        }
+        /* Floating Orbs */
+        body::before {
+            content: '';
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            top: -300px;
+            right: -300px;
+            background: radial-gradient(circle, rgba(240, 147, 251, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: float 20s ease-in-out infinite;
+            z-index: 0;
+        }
+        
+        /* Additional Floating Orb */
+        .container::before {
+            content: '';
+            position: fixed;
+            width: 400px;
+            height: 400px;
+            bottom: -200px;
+            left: -200px;
+            background: radial-gradient(circle, rgba(102, 126, 234, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(70px);
+            animation: float 25s ease-in-out infinite reverse;
+            z-index: 0;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, 40px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        
+        .container {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            max-width: 550px;
+            width: 100%;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(40px) saturate(200%);
+            -webkit-backdrop-filter: blur(40px) saturate(200%);
+            border-radius: 32px;
+            padding: 50px 40px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 20px 60px rgba(102, 126, 234, 0.2);
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            position: relative;
+            overflow: visible;
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c);
+            border-radius: 34px;
+            z-index: -1;
+            animation: borderRotate 8s linear infinite;
+            filter: blur(8px);
+            opacity: 0.6;
+        }
+        
+        @keyframes borderRotate {
+            0% { filter: hue-rotate(0deg) blur(8px); }
+            100% { filter: hue-rotate(360deg) blur(8px); }
+        }
+        
+        
+        .card::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+            border-radius: 38px;
+            z-index: -1;
+            opacity: 0;
+            animation: cardGlow 6s ease-in-out infinite;
+            filter: blur(8px);
+        }
+        
+        @keyframes cardGlow {
+            0%,
+            100% {
+                opacity: 0;
+                transform: scale(0.98);
+            }
+            50% {
+                opacity: 0.8;
+                transform: scale(1.02);
+            }
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .icon {
+            font-size: 90px;
+            margin-bottom: 25px;
+            animation: iconFloat3D 6s ease-in-out infinite;
+            filter: drop-shadow(0 10px 30px rgba(102, 126, 234, 0.5));
+            transform-style: preserve-3d;
+        }
+        
+        @keyframes iconFloat3D {
+            0%, 100% {
+                transform: translateY(0) rotateY(0deg) scale(1);
+            }
+            25% {
+                transform: translateY(-15px) rotateY(10deg) scale(1.05);
+            }
+            50% {
+                transform: translateY(-20px) rotateY(-10deg) scale(1.1);
+            }
+            75% {
+                transform: translateY(-15px) rotateY(5deg) scale(1.05);
+            }
+        }
+        
+        h1 {
+            color: white;
+            font-size: 2.6em;
+            margin-bottom: 15px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 4px 20px rgba(255, 255, 255, 0.3);
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 1.1em;
+            margin-bottom: 40px;
+            line-height: 1.8;
+            font-weight: 400;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        /* Welcome Screen */
+        
+        .welcome-screen {
+            display: block;
+        }
+        /* Form Screen */
+        
+        .form-screen {
+            display: none;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 35px;
+        }
+        
+        .feature {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            padding: 24px 16px;
+            border-radius: 20px;
+            font-size: 0.95em;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+        }
+        
+        @keyframes featurePulse {
+            0%,
+            100% {
+                transform: scale(1);
+                border-color: rgba(102, 126, 234, 0.2);
+            }
+            50% {
+                transform: scale(1.02);
+                border-color: rgba(102, 126, 234, 0.4);
+            }
+        }
+        
+        .feature:nth-child(1) {
+            --delay: 0;
+        }
+        
+        .feature:nth-child(2) {
+            --delay: 1;
+        }
+        
+        .feature:nth-child(3) {
+            --delay: 2;
+        }
+        
+        .feature:hover {
+            transform: translateY(-10px) scale(1.08) rotateY(5deg);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+        
+        .feature-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 10px rgba(102, 126, 234, 0.5));
+            animation: iconFloat 3s ease-in-out infinite;
+            display: inline-block;
+        }
+        
+        @keyframes iconFloat {
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-4px);
+            }
+        }
+        
+        .btn-start {
+            width: 100%;
+            padding: 22px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px;
+            font-size: 1.2em;
+            font-weight: 700;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            cursor: pointer;
+            border: none;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .btn-start::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn-start:hover {
+            transform: translateY(-8px) scale(1.03);
+            box-shadow: 0 25px 60px rgba(102, 126, 234, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+        }
+        
+        .btn-start:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .btn-start:active {
+            transform: translateY(-3px) scale(1);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        /* Form Styles */
+        
+        .form-group {
+            margin-bottom: 20px;
+            text-align: right;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 12px;
+            color: white;
+            font-weight: 700;
+            font-size: 1.05em;
+            letter-spacing: 0.5px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        input {
+            width: 100%;
+            padding: 18px 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            font-size: 17px;
+            font-family: inherit;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.3), 0 8px 25px rgba(102, 126, 234, 0.4);
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-3px) scale(1.01);
+        }
+        
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 400;
+        }
+        
+        .error {
+            background: rgba(255, 107, 107, 0.15);
+            backdrop-filter: blur(10px);
+            color: #ffcdd2;
+            padding: 16px 18px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: none;
+            font-size: 0.95em;
+            border: 2px solid rgba(255, 107, 107, 0.3);
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+            font-weight: 600;
+            animation: shake 0.5s ease;
+        }
+        
+        @keyframes shake {
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
+        }
+        
+        .back-btn {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            margin-top: 15px;
+        }
+        
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-4px) scale(1.02);
+        }
+        /* WhatsApp Button */
+        
+        .whatsapp-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(37, 211, 102, 0.2);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 18px 35px;
+            border-radius: 16px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.05em;
+            box-shadow: 0 10px 30px rgba(37, 211, 102, 0.4), 0 0 0 1px rgba(37, 211, 102, 0.3) inset;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            border: 2px solid rgba(37, 211, 102, 0.3);
+        }
+        
+        .whatsapp-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .whatsapp-btn:hover {
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 20px 50px rgba(37, 211, 102, 0.6);
+            background: rgba(37, 211, 102, 0.3);
+            border-color: rgba(37, 211, 102, 0.5);
+        }
+        
+        .whatsapp-btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .whatsapp-btn:active {
+            transform: translateY(-2px) scale(1);
+        }
+        
+        .whatsapp-btn svg {
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+            animation: iconPulse 2.5s ease-in-out infinite;
+        }
+        
+        @keyframes iconPulse {
+            0%,
+            100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+        }
+        
+        footer {
+            margin-top: 35px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.95em;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            font-weight: 400;
+            letter-spacing: 0.5px;
+        }
+        /* Mobile Optimizations */
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 15px;
+            }
+            .container {
+                max-width: 100%;
+            }
+            .card {
+                padding: 35px 25px;
+                border-radius: 28px;
+            }
+            h1 {
+                font-size: 2em;
+                margin-bottom: 12px;
+            }
+            .icon {
+                font-size: 70px;
+                margin-bottom: 15px;
+            }
+            .subtitle {
+                font-size: 1em;
+                margin-bottom: 30px;
+            }
+            .features {
+                grid-template-columns: 1fr;
+                gap: 12px;
+                margin-bottom: 30px;
+            }
+            .feature {
+                padding: 18px;
+                font-size: 0.95em;
+            }
+            .feature-icon {
+                font-size: 30px;
+            }
+            .btn-start {
+                font-size: 1.1em;
+                padding: 18px 32px;
+            }
+            input {
+                padding: 16px 18px;
+                font-size: 16px;
+            }
+            .form-group {
+                margin-bottom: 18px;
+            }
+            .whatsapp-btn {
+                padding: 16px 28px;
+                font-size: 1em;
+                gap: 10px;
+            }
+            .whatsapp-btn svg {
+                width: 22px;
+                height: 22px;
+            }
+        }
+        /* Extra Small Mobile */
+        @media (max-width: 400px) {
+            .card {
+                padding: 30px 22px;
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            .icon {
+                font-size: 60px;
+            }
+            .btn-start {
+                font-size: 1em;
+                padding: 16px 28px;
+            }
+            .whatsapp-btn {
+                padding: 14px 24px;
+                font-size: 0.95em;
+            }
+        }
+        /* Landscape Mobile */
+        
+        @media (max-height: 600px) and (orientation: landscape) {
+            body {
+                padding: 15px;
+            }
+            .card {
+                padding: 25px 30px;
+            }
+            .icon {
+                font-size: 40px;
+                margin-bottom: 10px;
+            }
+            h1 {
+                font-size: 1.5em;
+                margin-bottom: 8px;
+            }
+            .subtitle {
+                font-size: 0.9em;
+                margin-bottom: 20px;
+            }
+            .features {
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Notification Banner -->
+    <div id="notificationBanner" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 10000; max-width: 500px; width: 90%; animation: slideDown 0.5s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+            <div>
+                <div style="font-size: 24px; margin-bottom: 8px;">🔔</div>
+                <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 5px;" id="notifTitle"></div>
+                <div style="font-size: 0.95em; opacity: 0.95;" id="notifMessage"></div>
+            </div>
+            <button onclick="closeNotification()" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <!-- Welcome Screen -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="icon">🎓</div>
+                <h1>نظام الامتحانات الإلكترونية</h1>
+                <p class="subtitle">منصة متطورة للاختبارات التفاعلية - آمنة وسريعة ومبتكرة</p>
+
+                <div class="features">
+                    <div class="feature">
+                        <div class="feature-icon">⚡</div>
+                        <div>سريع الأداء</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🛡️</div>
+                        <div>مراقبة ذكية</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">⏱️</div>
+                        <div>توقيت دقيق</div>
+                    </div>
+                </div>
+
+                <button class="btn-start" onclick="showForm()">
+                    🚀 ابدأ الآن
+                </button>
+            </div>
+
+            <!-- Form Screen -->
+            <div class="form-screen" id="formScreen">
+                <div class="icon" style="font-size: 60px; margin-bottom: 15px;">📝</div>
+                <h1 style="font-size: 2em;">تسجيل الدخول</h1>
+                <p class="subtitle" style="margin-bottom: 25px;">أدخل بياناتك للبدء في الامتحان</p>
+
+                <div class="error" id="error"></div>
+
+                <form onsubmit="startExam(event)">
+                    <div class="form-group">
+                        <label for="name">الاسم الكامل (رباعي):</label>
+                        <input type="text" id="name" placeholder="" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">رقم تلفونك:</label>
+                        <input type="tel" id="phone" placeholder="" required maxlength="11" autocomplete="off">
+                    </div>
+
+                    <button type="submit" class="btn-start">
+                        ✅ دخول
+                    </button>
+
+                    <button type="button" class="btn-start back-btn" onclick="showWelcome()">
+                        ← العودة
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="https://wa.me/201005209667" target="_blank" class="whatsapp-btn">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="white">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                <span>💬 تواصل مع أحمد محرم</span>
+            </a>
+        </div>
+
+        <footer>
+            Made with 💜 by Ahmed Moharam © 2025
+        </footer>
+    </div>
+
+    <script>
+        function showForm() {
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('formScreen').style.display = 'block';
+        }
+
+        function showWelcome() {
+            document.getElementById('welcomeScreen').style.display = 'block';
+            document.getElementById('formScreen').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function startExam(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('name').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const errorDiv = document.getElementById('error');
+
+            // 🔐 Secret Admin Login
+            if (name === 'أحمد محرم' && phone === 'أحمد محرم') {
+                console.log('✅ Admin login successful - redirecting to admin.html');
+                localStorage.setItem('isAdmin', 'true');
+                window.location.href = 'admin.html';
+                return;
+            }
+
+            // التحقق من الاسم الرباعي
+            const nameWords = name.split(' ').filter(w => w.length > 0);
+
+            if (nameWords.length < 4) {
+                errorDiv.textContent = '⚠️ يجب إدخال الاسم الرباعي كاملاً احنا هنستعبط';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // التحقق من رقم الهاتف
+            if (phone.length !== 11 || !phone.startsWith('01')) {
+                errorDiv.textContent = '⚠️ رقم الهاتف يجب أن يكون 11 رقم ويبدأ بـ 01 ياد ي بايظظ اكتب الرقم صح';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // حفظ البيانات
+            localStorage.setItem('studentName', name);
+            localStorage.setItem('studentPhone', phone);
+
+            // الانتقال للامتحان
+            window.location.href = 'student.html';
+        }
+
+        // إخفاء رسالة الخطأ عند الكتابة
+        document.getElementById('name')?.addEventListener('input', () => {
+            document.getElementById('error').style.display = 'none';
+        });
+
+        document.getElementById('phone')?.addEventListener('input', () => {
+            document.getElementById('error').style.display = 'none';
+        });
+
+        // Notification System
+        function checkNotifications() {
+            const notifications = JSON.parse(localStorage.getItem('studentNotifications') || '[]');
+            const unreadNotifs = notifications.filter(n => !n.read);
+            
+            if (unreadNotifs.length > 0) {
+                // Show the latest notification
+                const latestNotif = unreadNotifs[unreadNotifs.length - 1];
+                showNotification(latestNotif);
+                
+                // Mark as read
+                latestNotif.read = true;
+                localStorage.setItem('studentNotifications', JSON.stringify(notifications));
+                
+                // Request browser notification permission
+                if ('Notification' in window && Notification.permission === 'default') {
+                    Notification.requestPermission();
+                }
+                
+                // Send browser notification if permitted
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(latestNotif.title, {
+                        body: latestNotif.message,
+                        icon: '🎓',
+                        tag: 'exam-notification'
+                    });
+                }
+            }
+        }
+
+        function showNotification(notif) {
+            const banner = document.getElementById('notificationBanner');
+            const title = document.getElementById('notifTitle');
+            const message = document.getElementById('notifMessage');
+            
+            if (banner && title && message) {
+                title.textContent = notif.title;
+                message.textContent = notif.message;
+                banner.style.display = 'block';
+                
+                // Auto-hide after 10 seconds
+                setTimeout(() => {
+                    closeNotification();
+                }, 10000);
+            }
+        }
+
+        function closeNotification() {
+            const banner = document.getElementById('notificationBanner');
+            if (banner) {
+                banner.style.animation = 'slideDown 0.5s ease reverse';
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                    banner.style.animation = 'slideDown 0.5s ease';
+                }, 500);
+            }
+        }
+
+        // Check for notifications on page load
+        window.addEventListener('load', () => {
+            checkNotifications();
+            
+            // Check for new notifications every 10 seconds
+            setInterval(checkNotifications, 10000);
+        });
+    </script>
+</body>
+
+</html>

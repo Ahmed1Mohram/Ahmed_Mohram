@@ -1,0 +1,566 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import { CheckCircle, Clock, Phone, MessageCircle, Shield, Crown, Upload, X } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { useAuth } from '@/components/providers'
+
+const VODAFONE_CASH_NUMBER = '01005209667'
+const WHATSAPP_NUMBER = '201005209667'
+
+export default function SubscriptionPage() {
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
+  const [packages, setPackages] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedPackage, setSelectedPackage] = useState<any>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState('vodafone')
+  const [receiptImage, setReceiptImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [sendingReceipt, setSendingReceipt] = useState(false)
+
+  // التحقق من حالة تسجيل الدخول وجلب الباقات
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      
+      if (user.subscription_status === 'active') {
+        router.push('/dashboard')
+        return
+      }
+      
+      fetchPackages()
+    }
+  }, [user, authLoading, router])
+
+  // جلب الباقات المتاحة
+  const fetchPackages = async () => {
+    try {
+      setLoading(true)
+      console.log('Fetching packages from API with timestamp:', new Date().toISOString())
+      
+      // إضافة تاريخ للتأكد من عدم استخدام النسخة المخزنة مؤقتًا
+      const response = await fetch(`/api/packages?t=${new Date().getTime()}`, {
+        method: 'GET',
+        headers: { 
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
+      
+      console.log('Packages response status:', response.status)
+      
+      if (!response.ok) {
+        throw new Error('فشل جلب الباقات')
+      }
+      
+      const rawResponseText = await response.text()
+      console.log('Raw packages response:', rawResponseText)
+      
+      const data = JSON.parse(rawResponseText)
+      console.log('Parsed packages data:', data)
+      
+      if (data.packages && Array.isArray(data.packages)) {
+        console.log('Mapping', data.packages.length, 'packages to UI format...')
+        console.log('First package:', JSON.stringify(data.packages[0]))
+        console.log('Package IDs:', data.packages.map((pkg: any) => pkg.id).join(', '))
+        
+        console.log('Data source:', data.source)
+        console.log('API timestamp:', data.timestamp)
+        
+        // تحويل الباقات إلى التنسيق المطلوب في واجهة المستخدم
+        const formattedPackages = data.packages.map((pkg: any) => {
+          const hasDiscount = pkg.discount_from !== null && pkg.discount_from > pkg.price
+          const discountPercent = hasDiscount ? Math.round((1 - (pkg.price / pkg.discount_from)) * 100) : 0
+          
+          return {
+            id: pkg.id,
+            name: pkg.name,
+            price: pkg.price,
+            originalPrice: pkg.discount_from || pkg.price,
+            discountPrice: pkg.price,
+            discountPercent,
+            hasDiscount,
+            duration: `${pkg.days_count} يوم`,
+            popular: pkg.is_default || false,
+            color: pkg.color || 'from-gold to-amber-600',
+            features: []
+          }
+        })
+        
+        setPackages(formattedPackages)
+        console.log('Successfully mapped packages to UI format')
+      } else {
+        console.error('Invalid packages data format:', data)
+        toast.error('تنسيق بيانات الباقات غير صالح')
+      }
+    } catch (error) {
+      console.error('Error fetching packages:', error)
+      toast.error('حدث خطأ في جلب الباقات')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // اختيار باقة وحفظها في قاعدة البيانات
+  const handleSelectPackage = async (pkg: any) => {
+    setSelectedPackage(pkg)
+    setShowPaymentModal(true)
+    
+    // حفظ اختيار الباقة في قاعدة البيانات
+    if (user) {
+      try {
+        console.log('Saving package selection with data:', {
+          userId: user.id,
+          packageId: pkg.id,
+          packageName: pkg.name,
+          price: pkg.hasDiscount ? pkg.discountPrice : pkg.price
+        });
+        
+        const response = await fetch('/api/save-package-selection', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            packageId: pkg.id,
+            packageName: pkg.name,
+            price: pkg.hasDiscount ? pkg.discountPrice : pkg.price
+          })
+        });
+        
+        const result = await response.json();
+        console.log('Package selection saved:', result);
+        
+        if (result.success) {
+          toast.success('تم اختيار الباقة بنجاح');
+        } else {
+          console.error('Error saving package selection:', result.error);
+          toast.error('حدث خطأ في حفظ اختيار الباقة');
+        }
+      } catch (error) {
+        console.error('Error saving package selection:', error);
+        toast.error('حدث خطأ في حفظ اختيار الباقة');
+      }
+    } else {
+      toast.error('يجب تسجيل الدخول لاختيار باقة');
+      router.push('/login');
+    }
+  }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('حجم الصورة يجب أن يكون أقل من 5 ميجابايت')
+        return
+      }
+      setReceiptImage(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handlePayment = async () => {
+    // التحقق من وجود صورة الإيصال لطريقة دفع فودافون كاش فقط
+    if (!receiptImage && paymentMethod === 'vodafone') {
+      toast.error('يجب إرفاق صورة إيصال الدفع لطريقة فودافون كاش')
+      return
+    }
+
+    setSendingReceipt(true)
+    
+    try {
+      // إرسال البيانات إلى API
+      const formData = new FormData()
+      formData.append('packageId', selectedPackage.id)
+      formData.append('packageName', selectedPackage.name)
+      
+      // استخدام السعر بعد الخصم إذا كان متوفراً
+      const finalPrice = selectedPackage.hasDiscount ? selectedPackage.discountPrice : selectedPackage.price
+      formData.append('price', finalPrice.toString())
+      formData.append('duration', selectedPackage.duration)
+      formData.append('paymentMethod', paymentMethod)
+      
+      if (receiptImage) {
+        formData.append('receipt', receiptImage)
+      }
+
+      const response = await fetch('/api/payment-request', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        // محاولة الحصول على تفاصيل الخطأ
+        try {
+          const errorData = await response.json();
+          console.error('تفاصيل الخطأ:', errorData);
+          throw new Error(errorData.error || 'فشل إرسال طلب الدفع');
+        } catch (parseError) {
+          throw new Error('فشل إرسال طلب الدفع');
+        }
+      }
+
+      // إرسال رسالة واتساب
+      const whatsappNumber = '201005209667' // رقم الواتساب للتواصل
+      
+      // إنشاء رسالة الواتساب مع معلومات الخصم إذا كانت متوفرة
+      let priceInfo = `السعر: ${finalPrice} جنيه`
+      
+      if (selectedPackage.hasDiscount) {
+        priceInfo = `السعر الأصلي: ${selectedPackage.originalPrice} جنيه\nالسعر بعد الخصم (${selectedPackage.discountPercent}%): ${selectedPackage.discountPrice} جنيه`
+      }
+      
+      // تحسين تنسيق رسالة واتساب لتجنب مشاكل الأسطر المتعددة
+      const userName = user?.full_name || ''
+      const userEmail = user?.email || ''
+      const userPhone = user?.phone_number || ''
+
+      const message = encodeURIComponent(
+        `مرحباً\n\n` + 
+        `الاسم: ${userName}\n` +
+        `البريد: ${userEmail}\n` +
+        `الهاتف: ${userPhone}\n\n` +
+        `طلب اشتراك في: ${selectedPackage.name}\n` + 
+        `${priceInfo}\n` + 
+        `المدة: ${selectedPackage.duration}\n` + 
+        `طريقة الدفع: ${paymentMethod === 'vodafone' ? 'فودافون كاش' : paymentMethod === 'instapay' ? 'InstaPay' : 'تحويل بنكي'}\n` +
+        (receiptImage ? 'تم إرفاق صورة الإيصال\n' : '')
+      )
+      
+      if (typeof window !== 'undefined') {
+        window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank')
+      }
+      
+      toast.success('تم إرسال طلب الاشتراك بنجاح! سيتم التواصل معك قريباً')
+      setShowPaymentModal(false)
+      setReceiptImage(null)
+      setImagePreview(null)
+    } catch (error: any) {
+      console.error('Error:', error)
+      toast.error(error?.message || 'حدث خطأ في إرسال الطلب. يرجى المحاولة مرة أخرى')
+    } finally {
+      setSendingReceipt(false)
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-gold border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-black relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="fixed inset-0 opacity-10">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-gold rounded-full filter blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600 rounded-full filter blur-3xl animate-pulse delay-1000"></div>
+      </div>
+
+      <div className="relative z-10 container mx-auto px-4 py-16">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-12"
+        >
+          <h1 className="text-5xl font-bold gradient-text mb-4">
+            اختر باقتك المناسبة
+          </h1>
+          <p className="text-xl text-white/80">
+            انضم لأكثر من 1000 طالب في رحلة التميز الأكاديمي
+          </p>
+          <button 
+            onClick={() => {
+              toast.success('جاري إعادة تحميل الباقات...');
+              // إعادة تحميل الصفحة لتحديث الباقات
+              setLoading(true);
+              setTimeout(() => {
+                location.reload();
+              }, 1000);
+            }}
+            className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-300"
+          >
+            تحديث قائمة الباقات
+          </button>
+        </motion.div>
+
+        {/* Packages Grid */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+          {loading ? (
+            // حالة التحميل
+            Array(4).fill(0).map((_, index) => (
+              <div key={index} className="h-[400px] bg-white/5 rounded-2xl animate-pulse"></div>
+            ))
+          ) : packages.length === 0 ? (
+            // لا توجد باقات
+            <div className="col-span-4 text-center py-12">
+              <p className="text-white/60 text-lg">لا توجد باقات متاحة حاليًا. يرجى المحاولة لاحقًا.</p>
+            </div>
+          ) : (
+            // عرض الباقات
+            packages.map((pkg, index) => (
+              <motion.div
+                key={pkg.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ y: -10, scale: 1.02 }}
+                className="relative"
+              >
+                {pkg.popular && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
+                    <span className="bg-gradient-to-r from-gold to-yellow-400 text-black px-4 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                      <Crown className="w-4 h-4" />
+                      الأكثر شعبية
+                    </span>
+                  </div>
+                )}
+
+                <div className={`luxury-card relative rounded-2xl p-6 h-full bg-black border-2 ${pkg.popular ? 'border-gold shadow-lg shadow-gold/30' : 'border-gold/40'} overflow-hidden`}>
+                  {/* خلفية التوهج الذهبية */}
+                  <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-gold/20 to-transparent opacity-70"></div>
+                  <div className="absolute inset-0 bg-[url('/gold-pattern.png')] opacity-10"></div>
+                  <div className="absolute -top-24 -left-24 w-48 h-48 rounded-full bg-gold/10 filter blur-3xl"></div>
+                  <div className="absolute -bottom-24 -right-24 w-48 h-48 rounded-full bg-gold/10 filter blur-3xl"></div>
+                  <div className="absolute inset-0 border-4 border-gold/5 rounded-2xl pointer-events-none"></div>
+                  <div className="relative z-10">
+                    <div className="text-center mb-6">
+                      <h3 className="text-2xl font-bold text-white mb-2">{pkg.name}</h3>
+                      {pkg.hasDiscount ? (
+                        <div className="flex flex-col items-center">
+                          <div className="text-lg line-through text-red-400 mb-0">
+                            {pkg.originalPrice} جنيه
+                          </div>
+                          <div className="text-4xl font-bold gradient-text mb-1 flex items-center gap-2">
+                            {pkg.discountPrice} جنيه
+                            <span className="text-sm bg-green-500 text-white px-2 py-1 rounded-full">
+                              {pkg.discountPercent}% خصم
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-4xl font-bold gradient-text mb-1">
+                          {pkg.price} جنيه
+                        </div>
+                      )}
+                      <div className="text-white/60 mt-1">
+                        {pkg.duration}
+                      </div>
+                    </div>
+                    
+                    {/* فاصل ذهبي */}
+                    <div className="relative my-4 py-2">
+                      <div className="absolute inset-y-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-gold/50 to-transparent"></div>
+                    </div>
+                    
+                    <ul className="space-y-3 mb-6 relative z-10">
+                      {pkg.features && pkg.features.length > 0 ? 
+                        pkg.features.map((feature: string, idx: number) => (
+                          <li key={idx} className="flex items-start gap-2 text-white/80">
+                            <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm">{feature}</span>
+                          </li>
+                        ))
+                      : <li className="text-white/60 text-center">لا توجد تفاصيل متاحة</li>}
+                    </ul>
+
+                    <button
+                      onClick={() => handleSelectPackage(pkg)}
+                      className={`w-full py-3.5 rounded-lg font-bold transition-all relative overflow-hidden group ${
+                        pkg.popular 
+                          ? 'bg-gradient-to-r from-gold to-yellow-500 text-black hover:shadow-lg hover:shadow-gold/50' 
+                          : 'border-2 border-gold/50 bg-black text-gold hover:bg-gold/10'
+                      }`}
+                    >
+                      {/* تأثير التوهج عند التحويم */}
+                      <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-gold/0 via-gold/30 to-gold/0 transform -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        <Crown className="w-5 h-5" />
+                        اشترك الآن
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </div>
+
+        {/* Features */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="mt-16 text-center"
+        >
+          <div className="flex flex-wrap justify-center gap-8">
+            <div className="flex items-center gap-2 text-white/80">
+              <Shield className="w-5 h-5 text-green-400" />
+              <span>دفع آمن 100%</span>
+            </div>
+            <div className="flex items-center gap-2 text-white/80">
+              <Clock className="w-5 h-5 text-gold" />
+              <span>وصول فوري للمحتوى</span>
+            </div>
+            <div className="flex items-center gap-2 text-white/80">
+              <CheckCircle className="w-5 h-5 text-blue-400" />
+              <span>محتوى حصري</span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedPackage && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gray-900 p-6 rounded-2xl w-full max-w-md border border-gold/20 shadow-xl"
+          >
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gold mb-1">تفاصيل الدفع</h2>
+              <p className="text-white/70">الباقة: {selectedPackage.name}</p>
+            </div>
+
+            <div className="space-y-6">
+              {/* معلومات الدفع */}
+              <div className="p-4 bg-gray-800/50 rounded-xl">
+                <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-3">
+                  <span className="text-white/70">المبلغ المطلوب:</span>
+                  <span className="text-xl font-bold text-gold">
+                    {selectedPackage.hasDiscount ? selectedPackage.discountPrice : selectedPackage.price} جنيه
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-white/70 text-sm">للدفع عبر فودافون كاش أرسل إلى:</p>
+                  <div className="flex items-center justify-between bg-red-950/30 p-2 rounded">
+                    <span className="font-mono text-white">{VODAFONE_CASH_NUMBER}</span>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(VODAFONE_CASH_NUMBER)}
+                      className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                    >
+                      نسخ
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* طرق الدفع */}
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-medium text-white/70">طريقة الدفع</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-4 rounded-md flex items-center justify-center gap-2 ${paymentMethod === 'vodafone' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+                    onClick={() => setPaymentMethod('vodafone')}
+                  >
+                    <Phone size={18} />
+                    فودافون كاش
+                    {paymentMethod === 'vodafone' && <span className="text-xs ml-1">(يتطلب إيصال)</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-4 rounded-md flex items-center justify-center gap-2 ${paymentMethod === 'instapay' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+                    onClick={() => setPaymentMethod('instapay')}
+                  >
+                    <MessageCircle size={18} />
+                    InstaPay
+                  </button>
+                </div>
+              </div>
+
+              {/* إرفاق الإيصال */}
+              <div className="mt-6">
+                <p className="text-sm font-medium text-white/70 mb-2">
+                  صورة إيصال الدفع 
+                  {paymentMethod === 'vodafone' ? 
+                    <span className="text-red-400"> (مطلوب)</span> : 
+                    <span className="text-gray-400"> (اختياري)</span>
+                  }
+                </p>
+                <div className="border-2 border-dashed border-white/20 rounded-xl p-4 text-center">
+                {imagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={imagePreview} 
+                      alt="Receipt" 
+                      className="max-h-40 mx-auto rounded-lg"
+                    />
+                    <button
+                      onClick={() => {
+                        setReceiptImage(null)
+                        setImagePreview(null)
+                      }}
+                      className="absolute top-2 right-2 p-2 bg-red-500 rounded-full text-white hover:bg-red-600 transition-all"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="w-12 h-12 text-gold/50 mx-auto mb-2" />
+                    <label className="cursor-pointer">
+                      <span className="text-gold hover:text-yellow-500 transition-colors">
+                        اضغط هنا لرفع الصورة
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-white/40 text-xs mt-2">
+                      PNG, JPG حتى 5 ميجابايت
+                    </p>
+                  </div>
+                )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={handlePayment}
+                  disabled={sendingReceipt}
+                  className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:shadow-lg hover:shadow-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MessageCircle className="w-6 h-6" />
+                  {sendingReceipt ? 'جاري الإرسال...' : 'إرسال الإيصال عبر WhatsApp'}
+                </button>
+
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="w-full bg-white/10 text-white py-3 rounded-xl hover:bg-white/20 transition-all"
+                >
+                  إلغاء
+                </button>
+              </div>
+
+              <p className="text-white/60 text-sm text-center mt-4">
+                بعد إرسال الإيصال، سيتم مراجعة طلبك خلال دقائق
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  )
+}

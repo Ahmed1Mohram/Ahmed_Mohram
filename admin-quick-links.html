@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>روابط سريعة - لوحة الإدارة</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+        
+        .title {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: #ccc;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .link-card {
+            background: linear-gradient(45deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.05));
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .link-card:hover {
+            transform: translateY(-5px);
+            border-color: #FFD700;
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);
+        }
+        
+        .link-card:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .link-card:hover:before {
+            left: 100%;
+        }
+        
+        .link-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #FFD700;
+        }
+        
+        .link-desc {
+            font-size: 0.9rem;
+            color: #ccc;
+            line-height: 1.4;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+        
+        .status.recommended {
+            background: #22c55e;
+            color: white;
+        }
+        
+        .status.backup {
+            background: #f59e0b;
+            color: white;
+        }
+        
+        .status.advanced {
+            background: #8b5cf6;
+            color: white;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">🛡️ لوحة الإدارة</h1>
+        <p class="subtitle">اختر الطريقة المناسبة للوصول إلى لوحة الإدارة</p>
+        
+        <div class="links-grid">
+            <a href="/admin-access" class="link-card">
+                <div class="link-title">الوصول المباشر</div>
+                <div class="link-desc">دخول سريع ومباشر دون أي تعقيدات</div>
+                <div class="status recommended">الأسرع والأفضل ⚡</div>
+            </a>
+            
+            <a href="/admin-direct" class="link-card">
+                <div class="link-title">لوحة الإدارة البديلة</div>
+                <div class="link-desc">واجهة كاملة مع جميع الأدوات الإدارية</div>
+                <div class="status backup">حل بديل</div>
+            </a>
+            
+            <a href="/admin?force=true" class="link-card">
+                <div class="link-title">الدخول القسري</div>
+                <div class="link-desc">تجاوز جميع فحوصات الأمان والدخول مباشرة</div>
+                <div class="status advanced">تقدم</div>
+            </a>
+            
+            <a href="/login-admin" class="link-card">
+                <div class="link-title">تسجيل دخول المسؤول</div>
+                <div class="link-desc">الطريقة التقليدية لتسجيل الدخول</div>
+                <div class="status backup">تقليدي</div>
+            </a>
+        </div>
+        
+        <div class="footer">
+            <p>💡 نصيحة: استخدم "الوصول المباشر" للدخول الأسرع</p>
+            <p style="margin-top: 10px; color: #666;">
+                بيانات تسجيل الدخول: أحمد محرم / أحمد محرم
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // إضافة تأثير بصري للروابط
+        document.querySelectorAll('.link-card').forEach(card => {
+            card.addEventListener('mouseover', function() {
+                this.style.transform = 'translateY(-8px) scale(1.02)';
+            });
+            
+            card.addEventListener('mouseout', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    </script>
+</body>
+</html>

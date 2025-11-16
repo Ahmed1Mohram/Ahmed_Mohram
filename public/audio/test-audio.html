@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Test</title>
+</head>
+<body>
+    <h1>اختبار ملفات الصوت</h1>
+    
+    <h2>ملفات الصوت الموجودة:</h2>
+    <ul>
+        <li><a href="/audio/welcome-sound.mp3" target="_blank">welcome-sound.mp3</a></li>
+        <li><a href="/audio/welcome.mp3" target="_blank">welcome.mp3</a></li>
+        <li><a href="/audio/منصه-enhanced-v2.wav" target="_blank">منصه-enhanced-v2.wav</a></li>
+        <li><a href="/welcome.mp3" target="_blank">welcome.mp3 (root)</a></li>
+        <li><a href="/welcome-sound.mp3" target="_blank">welcome-sound.mp3 (root)</a></li>
+    </ul>
+    
+    <h2>اختبار التشغيل:</h2>
+    <audio controls>
+        <source src="/audio/welcome-sound.mp3" type="audio/mpeg">
+        <source src="/audio/welcome.mp3" type="audio/mpeg">
+        <source src="/welcome-sound.mp3" type="audio/mpeg">
+        <source src="/welcome.mp3" type="audio/mpeg">
+        متصفحك لا يدعم عنصر الصوت.
+    </audio>
+    
+    <script>
+        // اختبار وجود الملفات
+        const files = [
+            '/audio/welcome-sound.mp3',
+            '/audio/welcome.mp3',
+            '/audio/منصه-enhanced-v2.wav',
+            '/welcome.mp3',
+            '/welcome-sound.mp3'
+        ];
+        
+        files.forEach(async (file) => {
+            try {
+                const response = await fetch(file, { method: 'HEAD' });
+                console.log(`${file}: ${response.ok ? 'موجود' : 'غير موجود'}`);
+            } catch (err) {
+                console.log(`${file}: خطأ - ${err.message}`);
+            }
+        });
+    </script>
+</body>
+</html>
