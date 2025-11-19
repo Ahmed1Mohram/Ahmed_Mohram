@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/components/providers'
+import { supabaseAdmin } from '@/lib/db-client'
+
+// إجبار هذا الـ API ليكون ديناميكياً دائماً في Next.js وتفادي أخطاء DYNAMIC_SERVER_USAGE
+export const dynamic = 'force-dynamic'
 
 /**
  * واجهة API مخصصة لجلب محاضرة واحدة مع محتواها للمستخدمين العاديين
@@ -14,8 +17,8 @@ export async function GET(
     
     console.log('طلب جلب محاضرة بمعرف:', lectureId)
     
-    // طريقة 1: استخدام supabase select
-    const { data: lecture, error: lectureError } = await supabase
+    // طريقة 1: استخدام supabaseAdmin select على السيرفر
+    const { data: lecture, error: lectureError } = await supabaseAdmin
       .from('lectures')
       .select(`
         *,
@@ -29,7 +32,7 @@ export async function GET(
     }
     
     // جلب محتوى المحاضرة
-    const { data: content, error: contentError } = await supabase
+    const { data: content, error: contentError } = await supabaseAdmin
       .from('lecture_content')
       .select('*')
       .eq('lecture_id', lectureId)
@@ -43,7 +46,7 @@ export async function GET(
     if (lectureError || contentError) {
       try {
         console.log('استخدام وظيفة SQL المباشرة لجلب المحاضرة')
-        const { data: directData, error: directError } = await supabase.rpc('get_lecture_with_content', {
+        const { data: directData, error: directError } = await supabaseAdmin.rpc('get_lecture_with_content', {
           lecture_id_param: lectureId
         })
         

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/components/providers'
+import { supabaseAdmin } from '@/lib/db-client'
+
+// إجبار هذا الـ API ليكون ديناميكياً دائماً في Next.js وتفادي أخطاء DYNAMIC_SERVER_USAGE
+export const dynamic = 'force-dynamic'
 
 /**
  * واجهة API مخصصة لجلب محتوى المحاضرات
@@ -17,8 +20,8 @@ export async function GET(req: NextRequest) {
     
     console.log(`جاري جلب محتوى المحاضرة بمعرف: ${lectureId}`)
     
-    // جلب محتويات المحاضرة من قاعدة البيانات (قد تعيد 0 عناصر إذا منعت RLS الوصول للصفوف)
-    const { data, error } = await supabase
+    // جلب محتويات المحاضرة من قاعدة البيانات باستخدام عميل السيرفر
+    const { data, error } = await supabaseAdmin
       .from('lecture_content')
       .select('*')
       .eq('lecture_id', lectureId)
@@ -33,7 +36,7 @@ export async function GET(req: NextRequest) {
     // محاولة جلب المحتوى مباشرة بواسطة SQL لتخطي أي قيود على RLS
     let directData: any[] | null = null
     try {
-      const { data: directResult, error: directError } = await supabase.rpc('get_lecture_content', {
+      const { data: directResult, error: directError } = await supabaseAdmin.rpc('get_lecture_content', {
         lecture_id_param: lectureId
       })
       
