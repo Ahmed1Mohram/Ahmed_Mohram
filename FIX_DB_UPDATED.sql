@@ -7,8 +7,6 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- منح الصلاحيات للوظيفة
-GRANT EXECUTE ON FUNCTION public.exec TO authenticated;
-GRANT EXECUTE ON FUNCTION public.exec TO anon;
 GRANT EXECUTE ON FUNCTION public.exec TO service_role;
 
 -- التحقق من وجود عمود duration_days في جدول packages وإضافته إذا لم يكن موجوداً
@@ -49,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   avatar_url TEXT,
   bio TEXT,
   payment_proof_url TEXT,
-  device_fingerprint TEXT,
+  device_fingerprint TEXT,  
   banned_devices JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -127,3 +125,122 @@ ON CONFLICT DO NOTHING;
 
 -- إعادة تحميل ذاكرة التخزين المؤقت للمخطط
 SELECT pg_reload_conf();
+
+
+
+
+
+حل المشكله ue-700","created_at":"2025-11-17T00:19:55.915598+00:00","updated_at":"2025-11-17T00:19:55.915598+00:00"}]}
+PackageManager.tsx:77 Fetched packages data: {success: true, packages: Array(4)}
+PackageManager.tsx:80 Setting 4 packages to state
+PackageManager.tsx:124 Saving package with data: {name: 'الباقه المميزه علشان خاطر عيونكم', price: 100, daysCount: 30, discountFrom: 200, isDefault: true, …}
+PackageManager.tsx:128 Setting up database before saving...
+PackageManager.tsx:159 Prepared package data for saving: {name: 'الباقه المميزه علشان خاطر عيونكم', price: 100, daysCount: 30, discountFrom: 200, isDefault: true, …}
+PackageManager.tsx:169  POST http://localhost:3000/api/admin/packages 500 (Internal Server Error)
+savePackage @ PackageManager.tsx:169
+await in savePackage
+callCallback @ react-dom.development.js:20458
+invokeGuardedCallbackImpl @ react-dom.development.js:20507
+invokeGuardedCallback @ react-dom.development.js:20582
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:20596
+executeDispatch @ react-dom.development.js:31933
+processDispatchQueueItemsInOrder @ react-dom.development.js:31965
+processDispatchQueue @ react-dom.development.js:31978
+dispatchEventsForPlugins @ react-dom.development.js:31989
+eval @ react-dom.development.js:32179
+batchedUpdates$1 @ react-dom.development.js:24790
+batchedUpdates @ react-dom.development.js:28650
+dispatchEventForPluginEventSystem @ react-dom.development.js:32178
+dispatchEvent @ react-dom.development.js:29946
+dispatchDiscreteEvent @ react-dom.development.js:29917Understand this error
+PackageManager.tsx:201 Raw API response: {"error":"Could not find the 'days_count' column of 'packages' in the schema cache"}
+PackageManager.tsx:244 API error: {error: "Could not find the 'days_count' column of 'packages' in the schema cache"}
+window.console.error @ app-index.js:34
+console.error @ hydration-error-info.js:41
+savePackage @ PackageManager.tsx:244
+await in savePackage
+callCallback @ react-dom.development.js:20458
+invokeGuardedCallbackImpl @ react-dom.development.js:20507
+invokeGuardedCallback @ react-dom.development.js:20582
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:20596
+executeDispatch @ react-dom.development.js:31933
+processDispatchQueueItemsInOrder @ react-dom.development.js:31965
+processDispatchQueue @ react-dom.development.js:31978
+dispatchEventsForPlugins @ react-dom.development.js:31989
+eval @ react-dom.development.js:32179
+batchedUpdates$1 @ react-dom.development.js:24790
+batchedUpdates @ react-dom.development.js:28650
+dispatchEventForPluginEventSystem @ react-dom.development.js:32178
+dispatchEvent @ react-dom.development.js:29946
+dispatchDiscreteEvent @ react-dom.development.js:29917Understand this error
+PackageManager.tsx:245 Package data that failed: {name: 'الباقه المميزه علشان خاطر عيونكم', price: 100, daysCount: 30, discountFrom: 200, isDefault: true, …}
+window.console.error @ app-index.js:34
+console.error @ hydration-error-info.js:41
+savePackage @ PackageManager.tsx:245
+await in savePackage
+callCallback @ react-dom.development.js:20458
+invokeGuardedCallbackImpl @ react-dom.development.js:20507
+invokeGuardedCallback @ react-dom.development.js:20582
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:20596
+executeDispatch @ react-dom.development.js:31933
+processDispatchQueueItemsInOrder @ react-dom.development.js:31965
+processDispatchQueue @ react-dom.development.js:31978
+dispatchEventsForPlugins @ react-dom.development.js:31989
+eval @ react-dom.development.js:32179
+batchedUpdates$1 @ react-dom.development.js:24790
+batchedUpdates @ react-dom.development.js:28650
+dispatchEventForPluginEventSystem @ react-dom.development.js:32178
+dispatchEvent @ react-dom.development.js:29946
+dispatchDiscreteEvent @ react-dom.development.js:29917Understand this error
+PackageManager.tsx:246 Response status: 500
+window.console.error @ app-index.js:34
+console.error @ hydration-error-info.js:41
+savePackage @ PackageManager.tsx:246
+await in savePackage
+callCallback @ react-dom.development.js:20458
+invokeGuardedCallbackImpl @ react-dom.development.js:20507
+invokeGuardedCallback @ react-dom.development.js:20582
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:20596
+executeDispatch @ react-dom.development.js:31933
+processDispatchQueueItemsInOrder @ react-dom.development.js:31965
+processDispatchQueue @ react-dom.development.js:31978
+dispatchEventsForPlugins @ react-dom.development.js:31989
+eval @ react-dom.development.js:32179
+batchedUpdates$1 @ react-dom.development.js:24790
+batchedUpdates @ react-dom.development.js:28650
+dispatchEventForPluginEventSystem @ react-dom.development.js:32178
+dispatchEvent @ react-dom.development.js:29946
+dispatchDiscreteEvent @ react-dom.development.js:29917Understand this error
+
+
+POST: Does packages table exist? true
+Inserting new package with ID: 0cszu0p
+Package data to insert: {
+  id: '0cszu0p',
+  name: 'الباقه المميزه علشان خاطر عيونكم',
+  price: 100,
+  days_count: 30,
+  discount_from: 200,
+  is_default: true,
+  color: 'from-amber-600/90 to-black',
+  created_at: '2025-11-18T01:43:37.057Z',
+  updated_at: '2025-11-18T01:43:37.057Z'
+}
+Error inserting package: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'days_count' column of 'packages' in the schema cache"
+}
+Error inserting package: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'days_count' column of 'packages' in the schema cache"
+}
+Package API error: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'days_count' column of 'packages' in the schema cache"
+}

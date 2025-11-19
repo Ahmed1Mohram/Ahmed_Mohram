@@ -77,11 +77,17 @@ export default function SubjectPage() {
     
     setSelectedLecture(lecture)
     // تسجيل المشاهدة
-    await fetch('/api/views', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lecture_id: lecture.id })
-    })
+    try {
+      const userData = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+      await fetch('/api/views', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-data': userData || ''
+        },
+        body: JSON.stringify({ lecture_id: lecture.id })
+      })
+    } catch {}
   }
 
   const getContentIcon = (type: string) => {

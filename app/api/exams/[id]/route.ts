@@ -16,7 +16,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           pass_threshold INT NOT NULL DEFAULT 60,
           is_published BOOLEAN NOT NULL DEFAULT FALSE,
           questions JSONB NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW()
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `
       await supabaseAdmin.rpc('exec', { sql: SQL })
@@ -28,7 +29,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           ADD COLUMN IF NOT EXISTS pass_threshold INT DEFAULT 60,
           ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS questions JSONB,
-          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+          ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
         SELECT pg_notify('pgrst', 'reload schema');
       `
       await supabaseAdmin.rpc('exec', { sql: ALTER })
@@ -65,6 +67,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.is_published !== undefined) updates.is_published = !!body.is_published
     if (body.subject_id !== undefined) updates.subject_id = body.subject_id
     if (body.questions !== undefined) updates.questions = body.questions
+    // Always bump updated_at on manual updates
+    updates.updated_at = new Date().toISOString()
 
     const { error } = await supabaseAdmin.from('exams').update(updates).eq('id', id)
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })

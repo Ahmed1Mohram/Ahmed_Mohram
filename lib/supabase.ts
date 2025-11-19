@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
 // الإعدادات الثابتة من ملف .env.local
-const SUPABASE_URL = 'https://fsvwusrpuiczznzgnyvd.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdnd1c3JwdWljenpuemdueXZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4ODY2MjEsImV4cCI6MjA3ODQ2MjYyMX0.hB6Z0rt0L8miLcPRSPrnjkMb4Mcq6Y_gK-ihbuEb70o'
-const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdnd1c3JwdWljenpuemdueXZkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mjg4NjYyMSwiZXhwIjoyMDc4NDYyNjIxfQ.nNVpkQodQkZ5RULi1R7yLHizr2ig58FbCNV6VBrxwc4'
+const SUPABASE_URL = 'https://tkvzxsuozjbmcmrxqpkt.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrdnp4c3VvempibWNtcnhxcGt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzMjQzOTAsImV4cCI6MjA3ODkwMDM5MH0.UuCNPp7MRwSA8ROtyzvz-1l-2EJc93r1jhQFm9eQZcU'
+// تأكد من تعبئة مفتاح service role الصحيح من Supabase Dashboard -> Settings -> API
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'service-role-key-here'
 
 // إنشاء عميل Supabase للاستخدام العام (للمستخدم)
 export const supabase = createClient(
@@ -20,7 +21,7 @@ export const supabase = createClient(
 // إنشاء عميل Supabase للمسؤول (للعمليات الإدارية)
 export const supabaseAdmin = createClient(
   SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_SERVICE_KEY,
   {
     auth: {
       autoRefreshToken: false,
@@ -33,7 +34,7 @@ export const supabaseAdmin = createClient(
 export function getSupabaseAdmin() {
   return createClient(
     SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_SERVICE_KEY,
     {
       auth: {
         autoRefreshToken: false,

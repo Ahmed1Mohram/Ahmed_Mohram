@@ -30,7 +30,6 @@ interface User {
   email: string
   phone_number: string
   password_hash?: string
-  password_plain?: string
   role?: 'admin' | 'teacher' | 'student'
   status: 'pending' | 'approved' | 'rejected' | 'banned'
   subscription_status: 'active' | 'inactive' | 'expired'

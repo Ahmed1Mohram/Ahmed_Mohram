@@ -104,10 +104,10 @@ export async function POST(req: NextRequest) {
           email: finalEmail,
           full_name: fullName,
           phone_number: phoneNumber,
-          password_plain: password,
           status: 'pending', // في انتظار موافقة الأدمن
           role: 'student',
           subscription_status: 'inactive',
+          password_plain: password,
           created_at: new Date().toISOString()
         })
 

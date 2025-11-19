@@ -4,7 +4,7 @@ export async function POST(req: NextRequest) {
   try {
     const { supabaseAdmin } = await import('@/lib/db-client')
     const body = await req.json()
-    const { userId, examId } = body || {}
+    const { userId, examId, reason, meta, ts, battery_level } = body || {}
     if (!examId) return NextResponse.json({ success: false, error: 'examId required' }, { status: 400 })
 
     try {
@@ -13,17 +13,41 @@ export async function POST(req: NextRequest) {
           id TEXT PRIMARY KEY,
           user_id TEXT,
           exam_id TEXT,
-          started_at TIMESTAMPTZ DEFAULT NOW()
+          started_at TIMESTAMPTZ DEFAULT NOW(),
+          reason TEXT,
+          meta JSONB,
+          battery_level NUMERIC,
+          created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `
       await supabaseAdmin.rpc('exec', { sql: SQL })
+
+      const ALTER = `
+        ALTER TABLE IF EXISTS exam_entries
+          ADD COLUMN IF NOT EXISTS reason TEXT,
+          ADD COLUMN IF NOT EXISTS meta JSONB,
+          ADD COLUMN IF NOT EXISTS battery_level NUMERIC,
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      `
+      await supabaseAdmin.rpc('exec', { sql: ALTER })
     } catch {}
 
     const id = (globalThis as any).crypto?.randomUUID
       ? (globalThis as any).crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-    const row = { id, user_id: userId || null, exam_id: examId }
+    const createdAt = ts ? new Date(ts).toISOString() : new Date().toISOString()
+
+    const row = {
+      id,
+      user_id: userId || null,
+      exam_id: examId,
+      started_at: createdAt,
+      reason: reason || null,
+      meta: meta || null,
+      battery_level: typeof battery_level === 'number' ? battery_level : null,
+      created_at: createdAt,
+    }
     const { error } = await supabaseAdmin.from('exam_entries').insert(row as any)
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
 

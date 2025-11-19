@@ -11,6 +11,7 @@ export default function ExamPage() {
   const [locked, setLocked] = useState(false)
   const [remaining, setRemaining] = useState(30 * 60)
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [cheatArmed, setCheatArmed] = useState(false)
   const tickRef = useRef<NodeJS.Timeout | null>(null)
   const examId = 'demo-exam-1'
 
@@ -27,6 +28,7 @@ export default function ExamPage() {
   }
 
   const lockExam = async (reason: string, meta: any = {}) => {
+    if (!cheatArmed && reason !== 'انتهى الوقت') return
     if (locked) return
     setLocked(true)
     await reportViolation(reason, meta)
@@ -64,6 +66,8 @@ export default function ExamPage() {
   useEffect(() => {
     if (!started) return
 
+    const armTimeout = setTimeout(() => setCheatArmed(true), 3000)
+
     const onVisibility = () => {
       if (document.hidden) lockExam('التبديل إلى تبويب آخر')
     }
@@ -93,16 +97,8 @@ export default function ExamPage() {
     document.addEventListener('paste', onPaste)
     document.addEventListener('keydown', onKey)
 
-    const devtoolsCheck = setInterval(() => {
-      const threshold = 160
-      // بدائية: إذا تغير الفرق بين outer/inner بشكل كبير
-      if (Math.abs((window.outerWidth - window.innerWidth)) > threshold || Math.abs((window.outerHeight - window.innerHeight)) > threshold) {
-        lockExam('فتح أدوات المطور')
-      }
-    }, 1000)
-
     return () => {
-      clearInterval(devtoolsCheck)
+      clearTimeout(armTimeout)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('fullscreenchange', onFsChange)

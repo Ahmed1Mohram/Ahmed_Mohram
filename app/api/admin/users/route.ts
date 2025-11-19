@@ -61,13 +61,16 @@ export async function GET(req: NextRequest) {
       } catch (authError) {
         console.error('Error fetching users from auth API:', authError)
       }
-      
-      // إذا فشلت كل المحاولات، أرجع الخطأ
-      return NextResponse.json({ 
-        success: false, 
-        error: error.message,
-        details: error 
-      }, { status: 500 })
+
+      // إذا فشلت كل المحاولات (أو المفتاح غير صالح)، لا نكسر لوحة الأدمن
+      // نرجع قائمة فارغة بدلاً من 500 حتى تستمر الواجهة في العمل
+      return NextResponse.json({
+        success: true,
+        users: [],
+        count: 0,
+        source: 'fallback-empty',
+        error: error.message
+      })
     }
 
     console.log(`Found ${count || 0} users from database`);

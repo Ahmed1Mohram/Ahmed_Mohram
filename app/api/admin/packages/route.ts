@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/db-client'
 import { ensurePackagesTableExists, insertDefaultPackagesIfNeeded } from '@/lib/packages-util'
+import { randomUUID } from 'crypto'
 
 // تعريف واجهة الباقة
 interface Package {
@@ -87,11 +88,12 @@ export async function GET(req: NextRequest) {
           .order('price', { ascending: true });
         
         // تحويل البيانات الجديدة إلى صيغة متوافقة
-        const formattedFreshPackages = freshData ? freshData.map(pkg => ({
+        const formattedFreshPackages = freshData ? freshData.map((pkg: any) => ({
           id: pkg.id,
           name: pkg.name,
           price: pkg.price,
-          daysCount: pkg.days_count, 
+          // دعم كلا الحقلين days_count و duration_days من الجدول
+          daysCount: pkg.days_count ?? pkg.duration_days, 
           discountFrom: pkg.discount_from || null,
           isDefault: pkg.is_default || false,
           color: pkg.color || 'from-blue-500 to-blue-700',
@@ -107,11 +109,12 @@ export async function GET(req: NextRequest) {
       }
       
       // تحويل البيانات من قاعدة البيانات إلى صيغة متوافقة مع واجهة المستخدم
-      const formattedPackages = packagesData.map(pkg => ({
+      const formattedPackages = packagesData.map((pkg: any) => ({
         id: pkg.id,
         name: pkg.name,
         price: pkg.price,
-        daysCount: pkg.days_count, // تحويل days_count إلى daysCount للتوافق مع واجهة المستخدم
+        // تحويل days_count أو duration_days إلى daysCount للتوافق مع واجهة المستخدم
+        daysCount: pkg.days_count ?? pkg.duration_days,
         discountFrom: pkg.discount_from || null,
         isDefault: pkg.is_default || false,
         color: pkg.color || 'from-blue-500 to-blue-700',
@@ -151,55 +154,34 @@ export async function POST(req: NextRequest) {
     const packageData = await req.json();
     console.log('Package data:', packageData);
     
-    // توحيد اسم حقل عدد الأيام للتعامل مع كلا النمطين (days_count و daysCount)
+    // توحيد اسم حقل عدد الأيام للتعامل مع الأنماط المختلفة (daysCount, days_count, duration_days)
     if (packageData.daysCount && !packageData.days_count) {
       packageData.days_count = packageData.daysCount;
     } else if (packageData.days_count && !packageData.daysCount) {
       packageData.daysCount = packageData.days_count;
     }
 
-    // التحقق من وجود جدول الباقات أولاً
-    const { data: tablesData } = await supabaseAdmin
-      .from('pg_tables')
-      .select('tablename')
-      .eq('schemaname', 'public')
-      .eq('tablename', 'packages');
-    
-    const tableExists = tablesData && tablesData.length > 0;
+    // إذا أتى الحقل من قاعدة البيانات باسم duration_days فقط
+    if (!packageData.daysCount && !packageData.days_count && packageData.duration_days) {
+      packageData.daysCount = packageData.duration_days;
+      packageData.days_count = packageData.duration_days;
+    }
+
+    // التحقق من وجود جدول الباقات أولاً باستخدام الدالة المساعدة الموحدة
+    const tableExists = await ensurePackagesTableExists();
     console.log('POST: Does packages table exist?', tableExists);
-    
-    // إذا لم يكن الجدول موجوداً، قم بإنشائه
+
     if (!tableExists) {
-      console.log('Creating packages table in POST method...');
-      await supabaseAdmin.rpc('exec', {
-        sql: `
-          CREATE TABLE IF NOT EXISTS packages (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            price INTEGER NOT NULL,
-            days_count INTEGER NOT NULL,
-            discount_from INTEGER,
-            color TEXT,
-            is_default BOOLEAN DEFAULT false,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-          );
-        `
-      });
-      
-      // إعادة تحميل ذاكرة المخطط
-      try {
-        console.log('POST: Reloading schema cache after table creation...');
-        await supabaseAdmin.rpc('reload_schema_cache');
-        console.log('POST: Waiting for schema cache to update...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      } catch (e) {
-        console.log('POST: Could not reload schema cache', e);
-      }
+      return NextResponse.json(
+        {
+          error: 'جدول الباقات غير متاح، تحقق من إعدادات قاعدة البيانات',
+        },
+        { status: 500 }
+      );
     }
     
-    // التحقق من وجود البيانات المطلوبة
-    if (!packageData.name || !packageData.price || (!packageData.daysCount && !packageData.days_count)) {
+    // التحقق من وجود البيانات المطلوبة (عدد الأيام يمكن أن يأتي من daysCount أو days_count أو duration_days)
+    if (!packageData.name || !packageData.price || (!packageData.daysCount && !packageData.days_count && !packageData.duration_days)) {
       console.log('Missing required fields:', packageData);
       return NextResponse.json(
         { 
@@ -207,7 +189,7 @@ export async function POST(req: NextRequest) {
           received: {
             name: packageData.name || null,
             price: packageData.price || null,
-            days_count: packageData.days_count || packageData.daysCount || null
+            days_count: packageData.days_count || packageData.daysCount || packageData.duration_days || null
           }
         },
         { status: 400 }
@@ -226,6 +208,7 @@ export async function POST(req: NextRequest) {
               name: packageData.name,
               price: packageData.price,
               days_count: packageData.daysCount,
+              duration_days: packageData.daysCount,
               discount_from: packageData.discountFrom || null,
               is_default: packageData.isDefault || false,
               color: packageData.color || null,
@@ -240,46 +223,24 @@ export async function POST(req: NextRequest) {
 
           result = data;
         } catch (updateError: any) {
-          // إذا كان الخطأ يتعلق بذاكرة المخطط، نستخدم SQL مباشر
-          if (updateError.message && (
-              updateError.message.includes('could not find the table') || 
-              updateError.message.includes('schema cache'))) {
-            
-            console.log('Using raw SQL due to schema cache error');
-            await supabaseAdmin.rpc('exec', {
-              sql: `
-                UPDATE packages 
-                SET 
-                  name = '${packageData.name}',
-                  price = ${packageData.price},
-                  days_count = ${packageData.daysCount},
-                  discount_from = ${packageData.discountFrom || 'NULL'},
-                  color = ${packageData.color ? `'${packageData.color}'` : 'NULL'},
-                  is_default = ${packageData.isDefault || false},
-                  updated_at = NOW()
-                WHERE id = '${packageData.id}'
-                RETURNING *;
-              `
-            });
-            
-            result = [{ id: packageData.id, ...packageData }];
-          } else {
-            throw updateError;
-          }
+          console.error('Error updating package:', updateError);
+          throw updateError;
         }
       } else {
-        // إنشاء باقة جديدة
-        const newId = Math.random().toString(36).substring(2, 9);
-        
+        // إنشاء باقة جديدة بمعرف UUID صالح يعمل مع نوع العمود TEXT أو UUID
+        const newId = randomUUID();
+
         try {
           console.log('Inserting new package with ID:', newId);
           
           // التأكد من أن البيانات جاهزة للإدراج
+          const daysValue = packageData.days_count || packageData.daysCount;
           const packageToInsert = {
             id: newId,
             name: packageData.name,
             price: packageData.price,
-            days_count: packageData.days_count || packageData.daysCount,
+            days_count: daysValue,
+            duration_days: daysValue,
             discount_from: packageData.discountFrom || null,
             is_default: packageData.isDefault || false,
             color: packageData.color || null,
@@ -302,64 +263,8 @@ export async function POST(req: NextRequest) {
           console.log('Package inserted successfully, result:', data);
           result = data;
         } catch (insertError: any) {
-          // إذا كان الخطأ يتعلق بذاكرة المخطط، نستخدم SQL مباشر
-          if (insertError.message && (
-              insertError.message.includes('could not find the table') || 
-              insertError.message.includes('schema cache'))) {
-            
-            console.log('Using raw SQL for insert due to schema cache error');
-            try {
-              const sqlQuery = `
-                INSERT INTO packages (
-                  id, name, price, days_count, discount_from, color, is_default, created_at, updated_at
-                ) VALUES (
-                  '${newId}',
-                  '${packageData.name}',
-                  ${packageData.price},
-                  ${packageData.days_count || packageData.daysCount},
-                  ${packageData.discountFrom || 'NULL'},
-                  ${packageData.color ? `'${packageData.color}'` : 'NULL'},
-                  ${packageData.isDefault || false},
-                  NOW(),
-                  NOW()
-                )
-                RETURNING *;
-              `;
-              
-              console.log('Raw SQL query:', sqlQuery);
-              
-              const { data: sqlResult, error: sqlError } = await supabaseAdmin.rpc('exec', {
-                sql: sqlQuery
-              });
-              
-              if (sqlError) {
-                console.error('SQL execution error:', sqlError);
-                throw sqlError;
-              }
-              
-              console.log('SQL execution successful:', sqlResult);
-            } catch (sqlExecError) {
-              console.error('Error executing SQL:', sqlExecError);
-              // استمرار التنفيذ رغم الخطأ
-            }
-            
-            // إرجاع نتيجة من البيانات المدخلة
-            result = [{ 
-              id: newId, 
-              name: packageData.name,
-              price: packageData.price,
-              days_count: packageData.days_count || packageData.daysCount,
-              daysCount: packageData.days_count || packageData.daysCount,
-              discount_from: packageData.discountFrom || null,
-              discountFrom: packageData.discountFrom || null,
-              color: packageData.color,
-              is_default: packageData.isDefault || false,
-              isDefault: packageData.isDefault || false,
-              created_at: new Date().toISOString()
-            }];
-          } else {
-            throw insertError;
-          }
+          console.error('Error inserting package:', insertError);
+          throw insertError;
         }
       }
       

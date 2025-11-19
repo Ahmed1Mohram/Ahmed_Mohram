@@ -71,6 +71,27 @@ export default function SubjectManager({ onManageLectures }: { onManageLectures:
     }
   }
 
+  const onSelectImage = async (file?: File | null) => {
+    if (!file) return
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('folder', 'subject-thumbnails')
+
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok || !json?.ok || !json.url) {
+        throw new Error(json?.error || 'upload failed')
+      }
+
+      setForm(prev => ({ ...prev, image_url: json.url }))
+      toast.success('تم رفع صورة المادة')
+    } catch (e) {
+      console.error('Subject image upload error:', e)
+      toast.error('فشل رفع صورة المادة')
+    }
+  }
+
   const openAdd = () => {
     setEditing(null)
     setForm({ title: '', description: '', image_url: '', color: 'from-blue-500 to-purple-600', is_premium: false, is_active: true, order_index: (subjects[subjects.length-1]?.order_index || 0) + 1 })
@@ -118,6 +139,15 @@ export default function SubjectManager({ onManageLectures }: { onManageLectures:
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'subject_created', data: { title: form.title } })
+          })
+          await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'subject_created',
+              title: `تم إضافة مادة جديدة`,
+              message: `تم إضافة مادة: ${form.title}`
+            })
           })
         } catch {}
       }
@@ -273,7 +303,18 @@ export default function SubjectManager({ onManageLectures }: { onManageLectures:
                 </div>
                 <div>
                   <label className="text-white/70 text-sm mb-2 block">صورة</label>
-                  <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white" placeholder="https://..." />
+                  <input
+                    value={form.image_url}
+                    onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white mb-2"
+                    placeholder="https://... (اختياري، أو ارفع صورة)"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onSelectImage(e.target.files?.[0] || null)}
+                    className="block w-full text-sm text-white/70 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gold file:text-black hover:file:bg-yellow-500/90"
+                  />
                 </div>
                 <div>
                   <label className="text-white/70 text-sm mb-2 block">الألوان</label>

@@ -222,6 +222,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user?.id) return
+
+    // تخطي فحص الحظر للأدمن أو للمعرّفات غير UUID (مثل admin-access, admin-direct, direct-admin-...)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    if (isAdmin || !uuidRegex.test(String(user.id))) return
+
     let cancelled = false
     const check = async () => {
       try {
@@ -240,7 +245,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     check()
     const iv = setInterval(check, 15000)
     return () => { cancelled = true; clearInterval(iv) }
-  }, [user?.id])
+  }, [user?.id, isAdmin])
 
   const signUp = async (email: string, password: string, fullName: string, phoneNumber: string) => {
     try {

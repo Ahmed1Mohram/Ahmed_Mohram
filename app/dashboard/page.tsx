@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers'
@@ -49,12 +49,25 @@ export default function DashboardPage() {
   const [recentLectures, setRecentLectures] = useState<any[]>([])
   const [examsPublished, setExamsPublished] = useState<any[]>([])
   const [latestResult, setLatestResult] = useState<any | null>(null)
+  const [quickCompletionRate, setQuickCompletionRate] = useState(0)
+  const [quickCertificates, setQuickCertificates] = useState(0)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [notificationsLoading, setNotificationsLoading] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [showChat, setShowChat] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [chatMessage, setChatMessage] = useState('')
   const [messages, setMessages] = useState<any[]>([])
+  const [adminOnline, setAdminOnline] = useState(false)
+  const [adminTyping, setAdminTyping] = useState(false)
+  const messagesChannelRef = useRef<any>(null)
+  const typingTimeoutRef = useRef<any>(null)
   const router = useRouter()
   const MAIN_SUBJECT_ID = '9c13de33-1c41-430d-8852-f4a3af7c9c6e'
+
+  const totalSubjects = subjects.length
+  const totalLectures = subjects.reduce((sum, s) => sum + (s.lectures_count || 0), 0)
 
   const fetchExamsPublished = async () => {
     try {
@@ -99,6 +112,36 @@ export default function DashboardPage() {
     }
   }
 
+  const loadNotifications = async (markRead: boolean) => {
+    try {
+      const userDataStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+      setNotificationsLoading(true)
+      const res = await fetch(`/api/notifications${markRead ? '?markRead=1' : ''}`, {
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-data': userDataStr || ''
+        }
+      })
+      const json = await res.json().catch(() => ({} as any))
+      if (!res.ok || !json?.success) return
+      const list = Array.isArray(json.notifications) ? json.notifications : []
+      setNotifications(list)
+      if (typeof json.unreadCount === 'number') {
+        setUnreadCount(json.unreadCount)
+      } else {
+        const uid = getCurrentUserId()
+        if (uid) {
+          const cnt = list.filter((n: any) => n.user_id === uid && n.is_read !== true).length
+          setUnreadCount(cnt)
+        }
+      }
+    } catch {
+    } finally {
+      setNotificationsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (authLoading) return
     const cookieString = typeof document !== 'undefined' ? document.cookie : ''
@@ -115,6 +158,7 @@ export default function DashboardPage() {
             fetchRecentLectures()
             fetchExamsPublished()
             fetchLatestSubmission()
+            fetchQuickUserStats()
             return
           }
         } catch {}
@@ -127,6 +171,8 @@ export default function DashboardPage() {
     fetchRecentLectures()
     fetchExamsPublished()
     fetchLatestSubmission()
+    fetchQuickUserStats()
+    loadNotifications(false)
   }, [user, router, authLoading])
   
   const getUserData = async () => {
@@ -179,21 +225,12 @@ export default function DashboardPage() {
 
   const fetchSubjects = async () => {
     try {
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .order('order_index')
-        
+      const res = await fetch('/api/subjects', { cache: 'no-store' })
+      const json = await res.json().catch(() => ({} as any))
+      if (!res.ok || !json?.success) throw new Error(json?.error || 'failed')
 
-      if (error) throw error
-
-      const subjectsWithImages = (data || []).map((subject, index) => ({
-        ...subject,
-        image_url: subject.image_url || defaultImages[index % defaultImages.length],
-        lectures_count: Math.floor(Math.random() * 20) + 5
-      }))
-
-      setSubjects(subjectsWithImages)
+      const data = json.subjects || []
+      setSubjects(data)
     } catch (error) {
       // بيانات تجريبية
       setSubjects([
@@ -245,39 +282,229 @@ export default function DashboardPage() {
     }
   }
 
+  const fetchQuickUserStats = async () => {
+    try {
+      const userDataStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+
+      // معدل الإنجاز من /api/student-stats
+      try {
+        const res = await fetch('/api/student-stats', {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-data': userDataStr || ''
+          }
+        })
+        const json = await res.json().catch(() => ({} as any))
+        if (res.ok && json?.success && json.stats) {
+          setQuickCompletionRate(json.stats.completion_rate || 0)
+        } else {
+          setQuickCompletionRate(0)
+        }
+      } catch {
+        setQuickCompletionRate(0)
+      }
+
+      // عدد الشهادات = عدد الامتحانات التي لدى الطالب فيها محاولة (بدرجة مسجلة)
+      try {
+        const userId = getCurrentUserId()
+        if (!userId) {
+          setQuickCertificates(0)
+          return
+        }
+        const res = await fetch(`/api/submit-exam?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' })
+        const json = await res.json().catch(() => ({} as any))
+        const submissions = Array.isArray(json?.submissions) ? json.submissions : []
+        const uniquePassedExams = new Set(
+          submissions
+            .filter((s: any) => typeof s.score === 'number')
+            .map((s: any) => s.exam_id)
+        )
+        setQuickCertificates(uniquePassedExams.size)
+      } catch {
+        setQuickCertificates(0)
+      }
+    } catch {
+      setQuickCompletionRate(0)
+      setQuickCertificates(0)
+    }
+  }
+
+  const getCurrentUserId = () => {
+    if (user?.id) return user.id
+    try {
+      const storedUserStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+      if (storedUserStr) {
+        const storedUser = JSON.parse(storedUserStr)
+        return storedUser?.id || null
+      }
+    } catch {}
+    return null
+  }
+
+  const loadMessages = async () => {
+    const userId = getCurrentUserId()
+    if (!userId) return
+    try {
+      const res = await fetch(`/api/messages?userId=${encodeURIComponent(userId)}&markReadUser=1`, { cache: 'no-store' })
+      const json = await res.json().catch(() => ({} as any))
+      if (!res.ok || !Array.isArray(json.messages)) return
+      const mapped = json.messages.map((m: any) => ({
+        id: m.id,
+        text: m.text,
+        sender: m.sender,
+        time: new Date(m.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        read_by_admin: m.read_by_admin,
+        read_by_user: m.read_by_user,
+      }))
+      setMessages(mapped)
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (!showChat) return
+    loadMessages()
+    const id = setInterval(loadMessages, 3000)
+    return () => clearInterval(id)
+  }, [showChat])
+
+  useEffect(() => {
+    const userId = getCurrentUserId()
+    if (!showChat || !userId) {
+      setAdminOnline(false)
+      setAdminTyping(false)
+      if (messagesChannelRef.current) {
+        try {
+          messagesChannelRef.current.send({ type: 'broadcast', event: 'status', payload: { role: 'user', userId, online: false } })
+        } catch {}
+        supabase.removeChannel(messagesChannelRef.current)
+        messagesChannelRef.current = null
+      }
+      return
+    }
+
+    const channel = supabase.channel(`support-chat-${userId}`, { config: { broadcast: { self: true } } })
+    messagesChannelRef.current = channel
+
+    channel
+      .on('broadcast', { event: 'status' }, (payload: any) => {
+        const data = (payload?.payload || {}) as any
+        if (data?.role === 'admin' && data?.userId === userId) {
+          setAdminOnline(!!data.online)
+        }
+      })
+      .on('broadcast', { event: 'typing' }, (payload: any) => {
+        const data = (payload?.payload || {}) as any
+        if (data?.role === 'admin' && data?.userId === userId) {
+          setAdminTyping(!!data.typing)
+        }
+      })
+      .subscribe((status: any) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            channel.send({ type: 'broadcast', event: 'status', payload: { role: 'user', userId, online: true } })
+          } catch {}
+        }
+      })
+
+    return () => {
+      setAdminOnline(false)
+      setAdminTyping(false)
+      if (messagesChannelRef.current) {
+        try {
+          messagesChannelRef.current.send({ type: 'broadcast', event: 'status', payload: { role: 'user', userId, online: false } })
+        } catch {}
+        supabase.removeChannel(messagesChannelRef.current)
+        messagesChannelRef.current = null
+      }
+    }
+  }, [showChat])
+
   const sendMessage = async () => {
     if (!chatMessage.trim()) return
 
-    const newMessage = {
-      id: Date.now(),
+    const userId = getCurrentUserId()
+    if (!userId) {
+      toast.error('يجب تسجيل الدخول لإرسال رسالة')
+      return
+    }
+
+    const optimisticId = Date.now()
+    const optimisticTime = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+    const optimisticMessage = {
+      id: optimisticId,
       text: chatMessage,
       sender: 'user',
-      time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+      time: optimisticTime
     }
 
-    setMessages([...messages, newMessage])
-    
+    setMessages(prev => [...prev, optimisticMessage])
+
+    const textToSend = chatMessage
+    setChatMessage('')
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    const userIdForTyping = getCurrentUserId()
+    if (userIdForTyping && messagesChannelRef.current) {
+      try {
+        messagesChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { role: 'user', userId: userIdForTyping, typing: false } })
+      } catch {}
+    }
+
     // حفظ الرسالة في قاعدة البيانات
     try {
-      await supabase.from('messages').insert({
-        sender_id: user?.id,
-        message_text: chatMessage
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, sender: 'user', text: textToSend })
       })
+      const json = await res.json().catch(() => ({} as any))
+      if (!res.ok || json?.error) {
+        throw new Error(json?.error || 'failed')
+      }
+      const saved = json.message
+      if (saved?.id && saved?.created_at) {
+        const serverMessage = {
+          id: saved.id,
+          text: saved.text,
+          sender: saved.sender,
+          time: new Date(saved.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+        }
+        setMessages(prev => prev.map(m => (m.id === optimisticId ? serverMessage : m)))
+      }
     } catch (error) {
       console.error('Error sending message:', error)
+      toast.error('فشل إرسال الرسالة، حاول مرة أخرى')
+      setMessages(prev => prev.filter(m => m.id !== optimisticId))
     }
-
-    setChatMessage('')
 
     // رد تلقائي من الأدمن (مؤقت)
     setTimeout(() => {
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
-        text: 'سيتم الرد عليك قريباً من قبل الأدمن',
+        text: 'تم استلام رسالتك، وسيقوم أحمد محرم بالرد عليك في أقرب وقت',
         sender: 'admin',
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
       }])
     }, 1000)
+  }
+
+  const handleChatChange = (value: string) => {
+    setChatMessage(value)
+    const userId = getCurrentUserId()
+    if (!userId || !messagesChannelRef.current) return
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    try {
+      messagesChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { role: 'user', userId, typing: true } })
+    } catch {}
+    typingTimeoutRef.current = setTimeout(() => {
+      try {
+        if (!messagesChannelRef.current) return
+        messagesChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { role: 'user', userId, typing: false } })
+      } catch {}
+    }, 2000)
   }
 
   if (loading) {
@@ -323,10 +550,87 @@ export default function DashboardPage() {
 
             {/* User Menu */}
             <div className="flex items-center gap-3">
-              <button className="relative p-2 rounded-lg hover:bg-white/10 transition-all">
-                <Bell className="w-5 h-5 text-white/70" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    const next = !showNotifications
+                    setShowNotifications(next)
+                    if (next) {
+                      loadNotifications(true)
+                    }
+                  }}
+                  className="relative p-2 rounded-lg hover:bg-white/10 transition-all"
+                >
+                  <Bell className="w-5 h-5 text-white/70" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-4 px-1 bg-red-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="fixed top-16 right-2 w-[calc(100vw-1rem)] sm:right-4 sm:w-80 max-h-[80vh] overflow-y-auto luxury-card rounded-2xl border border-gold/30 bg-black/95 shadow-xl z-50">
+                    <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-gold" />
+                        <span className="text-sm font-bold text-white">الإشعارات</span>
+                      </div>
+                      {notificationsLoading && (
+                        <span className="text-[11px] text-white/50">جاري التحديث...</span>
+                      )}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.length === 0 && !notificationsLoading && (
+                        <div className="px-4 py-6 text-center text-white/50 text-sm">
+                          لا توجد إشعارات حالياً
+                        </div>
+                      )}
+                      {notifications.map((n: any) => (
+                        <div
+                          key={n.id}
+                          className={`px-4 py-3 border-b transition-colors ${
+                            n.type === 'admin_message'
+                              ? 'border-gold/50 bg-gradient-to-r from-gold/10 to-yellow-500/5 hover:bg-gold/15'
+                              : 'border-white/5 hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div
+                                className={`text-sm font-semibold mb-1 ${
+                                  n.type === 'admin_message' ? 'text-gold' : 'text-white'
+                                }`}
+                              >
+                                {n.title}
+                              </div>
+                              <div
+                                className={`text-xs sm:text-sm whitespace-pre-line break-words ${
+                                  n.type === 'admin_message' ? 'text-gold/80' : 'text-white/70'
+                                }`}
+                              >
+                                {n.message}
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[10px] mt-0.5 ${
+                                n.type === 'admin_message' ? 'text-gold/70' : 'text-white/40'
+                              }`}
+                            >
+                              {n.created_at
+                                ? new Date(n.created_at).toLocaleDateString('ar-EG', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })
+                                : ''}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               
               <button 
                 onClick={() => setShowProfile(!showProfile)}
@@ -624,7 +928,7 @@ export default function DashboardPage() {
             className="luxury-card rounded-2xl p-6 text-center"
           >
             <BookOpen className="w-8 h-8 text-gold mx-auto mb-2" />
-            <h3 className="text-2xl font-bold text-white">4</h3>
+            <h3 className="text-2xl font-bold text-white">{totalSubjects}</h3>
             <p className="text-gray-400 text-sm">المواد المتاحة</p>
           </motion.div>
           
@@ -635,7 +939,7 @@ export default function DashboardPage() {
             className="luxury-card rounded-2xl p-6 text-center"
           >
             <Video className="w-8 h-8 text-gold mx-auto mb-2" />
-            <h3 className="text-2xl font-bold text-white">94</h3>
+            <h3 className="text-2xl font-bold text-white">{totalLectures}</h3>
             <p className="text-gray-400 text-sm">محاضرة</p>
           </motion.div>
           
@@ -646,7 +950,7 @@ export default function DashboardPage() {
             className="luxury-card rounded-2xl p-6 text-center"
           >
             <Trophy className="w-8 h-8 text-gold mx-auto mb-2" />
-            <h3 className="text-2xl font-bold text-white">85%</h3>
+            <h3 className="text-2xl font-bold text-white">{quickCompletionRate}%</h3>
             <p className="text-gray-400 text-sm">معدل الإنجاز</p>
           </motion.div>
           
@@ -657,7 +961,7 @@ export default function DashboardPage() {
             className="luxury-card rounded-2xl p-6 text-center"
           >
             <Award className="w-8 h-8 text-gold mx-auto mb-2" />
-            <h3 className="text-2xl font-bold text-white">3</h3>
+            <h3 className="text-2xl font-bold text-white">{quickCertificates}</h3>
             <p className="text-gray-400 text-sm">شهادات</p>
           </motion.div>
         </div>
@@ -666,7 +970,7 @@ export default function DashboardPage() {
       {/* Chat Button */}
       <button
         onClick={() => setShowChat(!showChat)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white shadow-lg hover:shadow-xl hover:scale-110 transition-all"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-r from-gold to-yellow-600 rounded-full flex items-center justify-center text-black shadow-lg hover:shadow-gold/40 hover:scale-110 border border-gold/60 transition-all"
       >
         {showChat ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
       </button>
@@ -676,23 +980,25 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="fixed bottom-24 right-6 z-50 w-96 h-[500px] luxury-card rounded-3xl overflow-hidden"
+          className="fixed bottom-24 right-6 z-50 w-96 h-[500px] luxury-card rounded-3xl overflow-hidden border border-gold/40 bg-gradient-to-br from-black via-zinc-900 to-black shadow-2xl shadow-gold/30"
         >
           {/* Chat Header */}
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <MessageCircle className="w-5 h-5 text-white" />
+          <div className="bg-gradient-to-r from-gold to-yellow-500 p-4 border-b border-gold/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <Crown className="w-5 h-5 text-black" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-black">أحمد محرم</h3>
+                  <p className="text-xs text-black/70">
+                    {adminTyping ? 'أحمد محرم يكتب الآن...' : adminOnline ? 'متصل الآن' : 'غير متصل حالياً'}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-white">الدعم الفني</h3>
-                <p className="text-xs text-white/80">متصل الآن</p>
-              </div>
-            </div>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 p-4 overflow-y-auto h-[350px] bg-black/50">
+          <div className="flex-1 p-4 overflow-y-auto h-[350px] bg-gradient-to-br from-black via-zinc-900 to-black">
             {messages.length === 0 ? (
               <div className="text-center text-white/50 mt-10">
                 <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -705,12 +1011,23 @@ export default function DashboardPage() {
                     <div className={`max-w-[70%] p-3 rounded-2xl ${
                       msg.sender === 'user' 
                         ? 'bg-gradient-to-r from-gold to-yellow-600 text-black' 
-                        : 'bg-white/10 text-white'
+                        : 'bg-black/60 border border-gold/40 text-gold'
                     }`}>
+                      <p className="text-[10px] mb-1 opacity-80 font-semibold">
+                        {msg.sender === 'user' ? 'أنت' : 'أحمد محرم'}
+                      </p>
                       <p className="text-sm">{msg.text}</p>
                       <p className={`text-xs mt-1 ${
                         msg.sender === 'user' ? 'text-black/60' : 'text-white/60'
-                      }`}>{msg.time}</p>
+                      }`}>
+                        {msg.time}
+                        {msg.sender === 'user' && (
+                          <>
+                            {' · '}
+                            {msg.read_by_admin ? 'شوهد' : 'لم يُقرأ بعد'}
+                          </>
+                        )}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -720,14 +1037,14 @@ export default function DashboardPage() {
 
           {/* Input */}
           <div className="p-4 border-t border-white/10">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="اكتب رسالتك..."
-                className="flex-1 px-4 py-2 bg-white/10 border border-white/20 rounded-full text-white placeholder-white/50 focus:border-gold/50 transition-all"
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatMessage}
+                    onChange={(e) => handleChatChange(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="اكتب رسالتك..."
+                    className="flex-1 px-4 py-2 bg-white/10 border border-white/20 rounded-full text-white placeholder-white/50 focus:border-gold/50 transition-all"
               />
               <button
                 onClick={sendMessage}

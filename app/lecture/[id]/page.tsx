@@ -15,13 +15,16 @@ import toast from 'react-hot-toast'
 // نوع المحتوى
 interface LectureContent {
   id: string
-  type: 'video' | 'pdf' | 'audio' | 'text'
+  type: string // تعديل لدعم أي نوع محتوى
   title: string
+  description?: string
   content_url?: string
+  thumbnail_url?: string
   content_text?: string
   duration_minutes?: number
   order_index: number
   is_downloadable: boolean
+  created_at?: string
 }
 
 interface Lecture {
@@ -43,7 +46,8 @@ export default function LecturePage() {
   const [lecture, setLecture] = useState<Lecture | null>(null)
   const [contents, setContents] = useState<LectureContent[]>([])
   const [selectedContent, setSelectedContent] = useState<LectureContent | null>(null)
-  const [activeTab, setActiveTab] = useState<'video' | 'pdf' | 'audio' | 'text'>('video')
+  // تحديث لدعم أي نوع محتوى جديد
+  const [activeTab, setActiveTab] = useState<string>('video')
   const [loading, setLoading] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [showPdfViewer, setShowPdfViewer] = useState(false)
@@ -57,22 +61,84 @@ export default function LecturePage() {
 
   const fetchLectureData = async () => {
     try {
+      console.log('جاري جلب البيانات للمحاضرة بمعرف:', lectureId)
+      
+      // تجربة الحصول على المحاضرة مع علاقة الموضوع
       const { data, error } = await supabase
         .from('lectures')
         .select(`
           *,
-          subject:subjects(id, title),
-          lecture_content(*)
+          subject:subjects(id, title)
         `)
         .eq('id', lectureId)
         .maybeSingle()
+      
+      if (error) {
+        console.error('خطأ في جلب المحاضرة:', error)
+        throw error
+      }
 
-      if (error) throw error
-      
+      if (!data) {
+        console.error('لم يتم العثور على المحاضرة بمعرف:', lectureId)
+        throw new Error('لم يتم العثور على المحاضرة')
+      }
+
+      console.log('تم جلب المحاضرة:', data)
+
+      // محاولة أولى باستخدام supabase client
+      console.log('جاري جلب محتوى المحاضرة للمحاضرة:', lectureId)
+      const { data: contentData, error: contentError } = await supabase
+        .from('lecture_content')
+        .select('*')
+        .eq('lecture_id', lectureId)
+        .order('order_index')
+
+      let finalContent: LectureContent[] = Array.isArray(contentData) ? (contentData as LectureContent[]) : []
+
+      // لوج نتائج الاستعلام عن المحتوى
+      if (contentError) {
+        console.error('خطأ في جلب محتوى المحاضرة باستخدام Supabase:', contentError)
+      } else {
+        console.log('تم جلب محتوى المحاضرة باستخدام Supabase:', finalContent.length, 'عنصر')
+      }
+
+      // إذا لم نجد محتوى أو حدث خطأ، نجرب API الذي يستخدم الدالة SQL لتجاوز RLS
+      if (contentError || finalContent.length === 0) {
+        try {
+          console.log('محاولة جلب المحتوى باستخدام /api/lecture-content كـ fallback')
+          const res = await fetch(`/api/lecture-content?lecture_id=${lectureId}`)
+          const json = await res.json()
+
+          if (!res.ok) {
+            throw new Error(json.error || 'Failed to fetch content')
+          }
+
+          const apiItems = (json.items || []) as LectureContent[]
+          console.log('نتيجة /api/lecture-content:', {
+            items: apiItems.length,
+            itemCount: json.itemCount,
+            directItems: Array.isArray(json.directItems) ? json.directItems.length : 0,
+          })
+
+          if (apiItems.length > 0) {
+            finalContent = apiItems
+          }
+        } catch (fetchError) {
+          console.error('فشل جلب المحتوى باستخدام /api/lecture-content:', fetchError)
+        }
+      }
+
+      // في هذه المرحلة finalContent يحتوي إما على نتيجة Supabase أو نتيجة الدالة SQL
       setLecture(data)
-      const sortedContent = data?.lecture_content?.sort((a: LectureContent, b: LectureContent) => a.order_index - b.order_index) || []
+
+      const sortedContent = [...finalContent].sort(
+        (a, b) => (a.order_index || 0) - (b.order_index || 0)
+      )
+      console.log('سيتم استخدام محتوى المحاضرة النهائي:', sortedContent.length, 'عنصر')
+      console.log('محتوى المحاضرة النهائي:', sortedContent)
+
       setContents(sortedContent)
-      
+
       // Respect ?type= query if provided, else pick first
       const desired = (searchParams?.get('type') as 'video' | 'audio' | 'pdf' | 'text' | null) || null
       const preferred = desired ? sortedContent.find((c: LectureContent) => c.type === desired) : null
@@ -159,7 +225,9 @@ export default function LecturePage() {
       case 'video': return <Video className="w-5 h-5" />
       case 'pdf': return <FileText className="w-5 h-5" />
       case 'audio': return <Headphones className="w-5 h-5" />
-      default: return <BookOpen className="w-5 h-5" />
+      case 'doc': return <FileText className="w-5 h-5" />
+      case 'text': return <BookOpen className="w-5 h-5" />
+      default: return <FileText className="w-5 h-5" />
     }
   }
 
@@ -169,7 +237,8 @@ export default function LecturePage() {
       case 'pdf': return 'PDF'
       case 'audio': return 'صوتي'
       case 'text': return 'شرح'
-      default: return 'نص'
+      case 'doc': return 'مستندات'
+      default: return 'ملف'
     }
   }
 
@@ -233,25 +302,48 @@ export default function LecturePage() {
                     exit={{ opacity: 0 }}
                     className="w-full h-full"
                   >
-                    {/* Video Player */}
                     {selectedContent.type === 'video' && (
                       <div className="w-full h-full flex items-center justify-center bg-black">
-                        {selectedContent.content_url?.includes('youtube') ? (
-                          <iframe
-                            src={selectedContent.content_url}
-                            className="w-full h-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        ) : (
-                          <video
-                            src={selectedContent.content_url}
-                            controls
-                            className="w-full h-full"
-                            onPlay={() => setIsPlaying(true)}
-                            onPause={() => setIsPlaying(false)}
-                          />
-                        )}
+                        {(() => {
+                          const url = selectedContent.content_url || ''
+                          const isYouTube = url.includes('youtube.com') || url.includes('youtu.be')
+                          if (isYouTube) {
+                            let embedUrl = url
+                            try {
+                              const u = new URL(url)
+                              if (u.hostname === 'youtu.be') {
+                                const id = u.pathname.replace('/', '')
+                                if (id) embedUrl = `https://www.youtube.com/embed/${id}`
+                              } else if (u.hostname.includes('youtube.com')) {
+                                if (u.pathname.startsWith('/embed/')) {
+                                  embedUrl = url
+                                } else {
+                                  const v = u.searchParams.get('v')
+                                  if (v) embedUrl = `https://www.youtube.com/embed/${v}`
+                                }
+                              }
+                            } catch (e) {}
+
+                            return (
+                              <iframe
+                                src={embedUrl}
+                                className="w-full h-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            )
+                          }
+
+                          return (
+                            <video
+                              src={selectedContent.content_url}
+                              controls
+                              className="w-full h-full"
+                              onPlay={() => setIsPlaying(true)}
+                              onPause={() => setIsPlaying(false)}
+                            />
+                          )
+                        })()}
                       </div>
                     )}
 
@@ -267,8 +359,8 @@ export default function LecturePage() {
                       </div>
                     )}
 
-                    {/* PDF Viewer */}
-                    {selectedContent.type === 'pdf' && (
+                    {/* PDF Viewer - تدعم الآن ملفات PDF والمستندات */}
+                    {(selectedContent.type === 'pdf' || selectedContent.type === 'doc') && (
                       <div className="w-full h-full flex flex-col items-center justify-center">
                         <div className="text-center mb-6">
                           <FileText className="w-24 h-24 text-gold/30 mx-auto mb-4" />

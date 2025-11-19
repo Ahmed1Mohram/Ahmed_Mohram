@@ -10,6 +10,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'examId and answers are required' }, { status: 400 })
     }
 
+    // منع دخول نفس الامتحان أكثر من مرة بدون إذن من الأدمن
+    if (userId) {
+      try {
+        const { data: lastSubmission } = await supabaseAdmin
+          .from('exam_submissions')
+          .select('id, allow_retry')
+          .eq('exam_id', examId)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (lastSubmission && lastSubmission.allow_retry !== true) {
+          return NextResponse.json(
+            { success: false, error: 'لا يمكنك دخول هذا الامتحان مرة أخرى إلا بعد موافقة المشرف.' },
+            { status: 403 },
+          )
+        }
+      } catch {
+        // في حال فشل التحقق، لا نمنع الطلب حتى لا نكسر التجربة للمستخدمين الشرعيين
+      }
+    }
+
     // حساب النتيجة بناءً على جدول الامتحانات
     let score: number | null = null
     try {
@@ -63,6 +86,7 @@ export async function POST(request: Request) {
       score,
       duration_seconds: typeof durationSeconds === 'number' ? Math.max(0, Math.floor(durationSeconds)) : null,
       created_at,
+      allow_retry: false,
     }
 
     let insertError: any = null
@@ -82,11 +106,17 @@ export async function POST(request: Request) {
           answers JSONB,
           score NUMERIC,
           duration_seconds INT,
+          allow_retry BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `
       try {
         await supabaseAdmin.rpc('exec', { sql: SQL })
+        const ALTER = `
+          ALTER TABLE IF EXISTS exam_submissions
+            ADD COLUMN IF NOT EXISTS allow_retry BOOLEAN DEFAULT FALSE;
+        `
+        await supabaseAdmin.rpc('exec', { sql: ALTER })
       } catch (e) {
         // ignore
       }
@@ -99,6 +129,54 @@ export async function POST(request: Request) {
         )
       }
     }
+    try {
+      if (userId) {
+        let title = 'نتيجة الامتحان'
+        let message = 'تم حفظ نتيجتك في الامتحان.'
+        try {
+          const { data: examRow } = await supabaseAdmin
+            .from('exams')
+            .select('title, questions, pass_threshold')
+            .eq('id', examId)
+            .maybeSingle()
+          if (examRow) {
+            const total = Array.isArray(examRow.questions) ? examRow.questions.length : null
+            let percent: number | null = null
+            if (typeof score === 'number' && typeof total === 'number' && total > 0) {
+              percent = Math.round((score / total) * 100)
+            }
+            const passThreshold = examRow.pass_threshold as number | null | undefined
+            const passed = typeof percent === 'number' && typeof passThreshold === 'number' ? percent >= passThreshold : null
+            title = `نتيجة امتحان: ${examRow.title || ''}`.trim()
+            const parts: string[] = []
+            if (typeof score === 'number' && typeof total === 'number') {
+              parts.push(`درجتك: ${score}/${total}`)
+            }
+            if (typeof percent === 'number') {
+              parts.push(`النسبة: ${percent}%`)
+            }
+            if (passed === true) {
+              parts.push('المستوى: ناجح ✅')
+            } else if (passed === false) {
+              parts.push('المستوى: لم تحقق درجة النجاح ❌')
+            }
+            message = parts.join(' | ') || message
+          }
+        } catch {}
+
+        try {
+          await supabaseAdmin
+            .from('notifications')
+            .insert({
+              user_id: userId,
+              type: 'exam_result',
+              title,
+              message,
+              is_read: false,
+            })
+        } catch {}
+      }
+    } catch {}
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

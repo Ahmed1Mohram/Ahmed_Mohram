@@ -96,16 +96,15 @@ export default function SubjectsPage() {
 
       if (error) throw error
 
-      // إضافة صور افتراضية إذا لم توجد صور
-      const subjectsWithImages = (data || []).map((subject, index) => ({
+      // إضافة بيانات تجريبية للإحصائيات مع الاحتفاظ بالصورة كما هي من قاعدة البيانات
+      const subjectsWithStats = (data || []).map((subject, index) => ({
         ...subject,
-        image_url: subject.image_url || defaultImages[index % defaultImages.length],
         lectures_count: Math.floor(Math.random() * 20) + 5,
         total_duration: Math.floor(Math.random() * 300) + 60,
         students_count: Math.floor(Math.random() * 500) + 100
       }))
 
-      setSubjects(subjectsWithImages)
+      setSubjects(subjectsWithStats)
     } catch (error) {
       console.error('Error fetching subjects:', error)
       // بيانات تجريبية

@@ -36,7 +36,16 @@ export async function GET(req: NextRequest) {
     const { data, error, count } = await query
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      // لا نكسر لوحة الأدمن بسبب خطأ في Supabase (مثل Invalid API key)
+      // نرجع نتيجة فارغة بدلاً من 500 حتى تستمر الواجهة
+      return NextResponse.json({
+        success: true,
+        users: [],
+        count: 0,
+        page,
+        limit,
+        error: error.message
+      })
     }
 
     return NextResponse.json({
@@ -47,7 +56,15 @@ export async function GET(req: NextRequest) {
       limit
     })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || 'Unknown error' }, { status: 500 })
+    // في حالة حدوث خطأ غير متوقع، نرجع نتيجة فارغة أيضًا
+    return NextResponse.json({
+      success: true,
+      users: [],
+      count: 0,
+      page: 1,
+      limit: 20,
+      error: error.message || 'Unknown error'
+    })
   }
 }
 

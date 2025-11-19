@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Clock, Shield, AlertTriangle } from 'lucide-react'
+import { Clock, Shield, AlertTriangle, CheckCircle } from 'lucide-react'
 
 interface Exam {
   id: string
@@ -23,6 +23,10 @@ export default function ExamByIdPage() {
   const [locked, setLocked] = useState(false)
   const [remaining, setRemaining] = useState(0)
   const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null)
+  const [cheatArmed, setCheatArmed] = useState(false)
+  const [finished, setFinished] = useState(false)
+  const [examLockedForUser, setExamLockedForUser] = useState(false)
   const tickRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -45,6 +49,32 @@ export default function ExamByIdPage() {
     if (examId) load()
   }, [examId])
 
+  // التحقق إذا كان الطالب قد دخل هذا الامتحان من قبل وهل مسموح له بالإعادة أم لا
+  useEffect(() => {
+    const checkPreviousSubmission = async () => {
+      try {
+        if (!examId) return
+        const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+        const userId = userStr ? (JSON.parse(userStr)?.id || null) : null
+        if (!userId) return
+
+        const res = await fetch(`/api/submit-exam?examId=${examId}&userId=${encodeURIComponent(userId)}&limit=1`, { cache: 'no-store' })
+        const json = await res.json().catch(() => ({} as any))
+        const last = (json?.submissions || [])[0]
+
+        if (last && last.allow_retry !== true) {
+          setExamLockedForUser(true)
+        } else {
+          setExamLockedForUser(false)
+        }
+      } catch {
+        // في حالة الخطأ نتجاهل حتى لا نمنع الطالب بدون سبب واضح
+      }
+    }
+
+    checkPreviousSubmission()
+  }, [examId])
+
   const reportViolation = async (reason: string, meta: any = {}) => {
     try {
       const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
@@ -52,12 +82,21 @@ export default function ExamByIdPage() {
       await fetch('/api/exam-entries', { // record entry/violation lightweight as entry
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, examId, reason, meta, ts: Date.now() })
+        body: JSON.stringify({
+          userId,
+          examId,
+          reason,
+          meta,
+          ts: Date.now(),
+          battery_level: batteryLevel,
+        })
       })
     } catch {}
   }
 
   const lockExam = async (reason: string, meta: any = {}) => {
+    if (finished) return
+    if (!cheatArmed && reason !== 'انتهى الوقت') return
     if (locked) return
     setLocked(true)
     await reportViolation(reason, meta)
@@ -79,6 +118,9 @@ export default function ExamByIdPage() {
   }
 
   const requestFs = async () => {
+    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android/i.test(((navigator as any).userAgent || ''))
+    if (isMobile) return
+
     const el: any = document.documentElement
     if (el.requestFullscreen) await el.requestFullscreen()
     if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
@@ -86,14 +128,31 @@ export default function ExamByIdPage() {
   }
 
   const startExam = async () => {
+    if (examLockedForUser) return
     try {
       await requestFs()
       const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
       const userId = userStr ? (JSON.parse(userStr)?.id || null) : null
+
+      let battery_level: number | null = null
+      try {
+        const nav: any = typeof navigator !== 'undefined' ? (navigator as any) : null
+        if (nav && typeof nav.getBattery === 'function') {
+          const battery = await nav.getBattery()
+          if (battery && typeof battery.level === 'number') {
+            battery_level = Math.round(battery.level * 100)
+          }
+        }
+      } catch {}
+
+      if (battery_level !== null) {
+        setBatteryLevel(battery_level)
+      }
+
       await fetch('/api/exam-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, examId })
+        body: JSON.stringify({ userId, examId, battery_level })
       })
     } catch {}
     setStarted(true)
@@ -101,7 +160,9 @@ export default function ExamByIdPage() {
   }
 
   useEffect(() => {
-    if (!started) return
+    if (!started || finished) return
+
+    const armTimeout = setTimeout(() => setCheatArmed(true), 3000)
 
     const onVisibility = () => { if (document.hidden) lockExam('التبديل إلى تبويب آخر') }
     const onBlur = () => lockExam('خروج من نافذة الامتحان')
@@ -131,6 +192,7 @@ export default function ExamByIdPage() {
     document.addEventListener('keydown', onKey)
 
     return () => {
+      clearTimeout(armTimeout)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('fullscreenchange', onFsChange)
@@ -142,7 +204,7 @@ export default function ExamByIdPage() {
       document.removeEventListener('paste', onPaste)
       document.removeEventListener('keydown', onKey)
     }
-  }, [started])
+  }, [started, finished])
 
   useEffect(() => {
     return () => { if (tickRef.current) clearInterval(tickRef.current as any) }
@@ -160,8 +222,9 @@ export default function ExamByIdPage() {
   }
 
   const submitExam = async () => {
-    if (locked) return
-    setLocked(true)
+    if (locked || finished) return
+    setFinished(true)
+    setStarted(false)
     try {
       const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
       const userId = userStr ? (JSON.parse(userStr)?.id || null) : null
@@ -173,7 +236,7 @@ export default function ExamByIdPage() {
       })
     } catch {}
     if (tickRef.current) clearInterval(tickRef.current as any)
-    setTimeout(() => router.push('/dashboard'), 1000)
+    setTimeout(() => router.push('/dashboard'), 2000)
   }
 
   if (loading || !exam) {
@@ -187,7 +250,7 @@ export default function ExamByIdPage() {
   return (
     <div className="min-h-screen bg-black py-8 px-4 select-none">
       <div className="max-w-4xl mx-auto">
-        {!started && !locked && (
+        {!started && !locked && !finished && !examLockedForUser && (
           <div className="luxury-card rounded-3xl p-8 text-center">
             <div className="mx-auto w-16 h-16 rounded-full bg-gold/20 flex items-center justify-center mb-4"><Shield className="w-8 h-8 text-gold" /></div>
             <h1 className="text-2xl font-bold mb-2">{exam.title}</h1>
@@ -196,7 +259,18 @@ export default function ExamByIdPage() {
           </div>
         )}
 
-        {started && !locked && (
+        {!started && !locked && !finished && examLockedForUser && (
+          <div className="luxury-card rounded-3xl p-8 text-center border-amber-500/40">
+            <div className="mx-auto w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
+              <Shield className="w-8 h-8 text-amber-300" />
+            </div>
+            <h2 className="text-xl font-bold mb-2 text-amber-300">لا يمكنك دخول هذا الامتحان الآن</h2>
+            <p className="text-white/70 mb-2">لقد قمت بأداء هذا الامتحان من قبل، ولا يمكن إعادة المحاولة إلا بعد موافقة المشرف من لوحة الأدمن.</p>
+            <p className="text-white/50 text-sm">تواصل مع أحمد محرم إذا كنت تحتاج إلى فتح محاولة جديدة لهذا الامتحان.</p>
+          </div>
+        )}
+
+        {started && !locked && !finished && (
           <>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 text-white/80"><Clock className="w-5 h-5 text-gold" /> <span>الوقت المتبقي: {formatTime(remaining)}</span></div>
@@ -244,7 +318,15 @@ export default function ExamByIdPage() {
           </>
         )}
 
-        {locked && (
+        {finished && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="luxury-card rounded-3xl p-8 text-center border-green-500/30">
+            <div className="mx-auto w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4"><CheckCircle className="w-8 h-8 text-green-400" /></div>
+            <h2 className="text-xl font-bold mb-2 text-green-400">تم تسليم الامتحان بنجاح</h2>
+            <p className="text-white/70">تم حفظ إجاباتك وسيتم عرض النتيجة في لوحة التحكم.</p>
+          </motion.div>
+        )}
+
+        {locked && !finished && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="luxury-card rounded-3xl p-8 text-center border-red-500/30">
             <div className="mx-auto w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4"><AlertTriangle className="w-8 h-8 text-red-400" /></div>
             <h2 className="text-xl font-bold mb-2 text-red-400">تم غلق الامتحان</h2>

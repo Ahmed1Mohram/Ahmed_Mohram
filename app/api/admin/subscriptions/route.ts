@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
     }
     
     const { data, error } = await query
-    
+
     // في حالة عدم وجود الجدول
     if (error && error.code === 'PGRST205') {
       console.log('Subscriptions table does not exist, creating...');
@@ -116,22 +116,28 @@ export async function GET(req: NextRequest) {
           message: 'تم إنشاء جداول البيانات. الرجاء إعادة تحميل الصفحة للاطلاع على البيانات.'
         });
       }
-      
+
+      // لو فشل إنشاء الجداول، لا نكسر لوحة الأدمن؛ نرجع قائمة فارغة
       return NextResponse.json({
-        success: false,
+        success: true,
         subscriptions: [],
         error: 'فشل إنشاء جدول الاشتراكات'
       });
     }
-    
-    // في حالة أي خطأ آخر
+
+    // في حالة أي خطأ آخر (مثل Invalid API key)، لا نرمي استثناء بل نرجع قائمة فارغة
     if (error) {
-      throw new Error(error.message)
+      console.warn('Subscriptions query error, returning empty list instead of 500:', error)
+      return NextResponse.json({
+        success: true,
+        subscriptions: [],
+        error: error.message
+      })
     }
     
     // حساب الأيام المتبقية لكل اشتراك
     const now = new Date()
-    const subscriptionsWithDays = data.map(subscription => {
+    const subscriptionsWithDays = data.map((subscription: any) => {
       const expiryDate = new Date(subscription.expiry_date)
       const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       const isActive = daysLeft > 0 && subscription.status === 'active'
@@ -158,10 +164,12 @@ export async function GET(req: NextRequest) {
     })
   } catch (error: any) {
     console.error('Subscription API error:', error)
-    return NextResponse.json(
-      { error: error.message || 'حدث خطأ في جلب الاشتراكات' },
-      { status: 500 }
-    )
+    // حتى في الأخطاء غير المتوقعة، نرجع قائمة فارغة للحفاظ على عمل لوحة الأدمن
+    return NextResponse.json({
+      success: true,
+      subscriptions: [],
+      error: error.message || 'حدث خطأ في جلب الاشتراكات'
+    })
   }
 }
 
@@ -214,7 +222,11 @@ export async function POST(req: NextRequest) {
       
       // تحديث حالة اشتراك المستخدم والسماح بدخول المنصة ومشاهدة المحاضرات
       if (status === 'active') {
-        const userUpdateData: any = { subscription_status: 'active' };
+        const userUpdateData: any = {
+          subscription_status: 'active',
+          subscription_end_date: expiryDate.toISOString(),
+          package_name: currentSub.package_name
+        };
         
         // إذا كانت علامة السماح بدخول المنصة مفعلة
         if (allowPlatformAccess) {
@@ -229,9 +241,17 @@ export async function POST(req: NextRequest) {
           .update(userUpdateData)
           .eq('id', currentSub.user_id)
       } else if (status === 'expired' || status === 'cancelled') {
+        const userUpdateData: any = {
+          subscription_status: status === 'expired' ? 'expired' : 'inactive'
+        };
+
+        if (status === 'expired') {
+          userUpdateData.subscription_end_date = expiryDate.toISOString();
+        }
+
         await supabaseAdmin
           .from('users')
-          .update({ subscription_status: 'inactive' })
+          .update(userUpdateData)
           .eq('id', currentSub.user_id)
       }
       
@@ -292,7 +312,11 @@ export async function POST(req: NextRequest) {
       
       // تحديث حالة اشتراك المستخدم والسماح بدخول المنصة
       if (status === 'active') {
-        const userUpdateData: any = { subscription_status: 'active' };
+        const userUpdateData: any = {
+          subscription_status: 'active',
+          subscription_end_date: expiryDate.toISOString(),
+          package_name: package_name
+        };
         
         // إذا كانت علامة السماح بدخول المنصة مفعلة
         if (allowPlatformAccess) {

@@ -28,6 +28,12 @@ export default function ExamManager() {
   const [selectedExam, setSelectedExam] = useState<any | null>(null)
   const [entries, setEntries] = useState<any[]>([])
   const [submissions, setSubmissions] = useState<any[]>([])
+  const [examDetails, setExamDetails] = useState<any | null>(null)
+  const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null)
+  const [showCertificate, setShowCertificate] = useState(false)
+  const [notifTitle, setNotifTitle] = useState('')
+  const [notifMessage, setNotifMessage] = useState('')
+  const [notifSending, setNotifSending] = useState(false)
 
   const [form, setForm] = useState({
     title: '',
@@ -88,6 +94,17 @@ export default function ExamManager() {
       const json = await res.json()
       if (!json.success) throw new Error(json.error || 'فشل إنشاء الامتحان')
       toast.success('تم إنشاء الامتحان')
+      try {
+        const subjectTitle = subjects.find(s => s.id === form.subject_id)?.title || ''
+        await fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'exam_created',
+            data: { title: form.title, subject: subjectTitle }
+          })
+        })
+      } catch {}
       setForm({ title: '', subject_id: '', duration_minutes: 60, pass_threshold: 60, is_published: false })
       setQuestions([{ id: 'q1', text: '', type: 'mcq', options: [{ value: '' }, { value: '' }, { value: '' }, { value: '' }], correct: '' }])
       fetchExams()
@@ -112,15 +129,22 @@ export default function ExamManager() {
 
   const loadExamData = async (exam: any) => {
     setSelectedExam(exam)
+    setSelectedSubmission(null)
+    setExamDetails(null)
     try {
-      const [entriesRes, subsRes] = await Promise.all([
+      const [entriesRes, subsRes, examRes] = await Promise.all([
         fetch(`/api/exam-entries?examId=${exam.id}`),
         fetch(`/api/submit-exam?examId=${exam.id}`),
+        fetch(`/api/exams/${exam.id}`),
       ])
       const entriesJson = await entriesRes.json()
       const subsJson = await subsRes.json()
+      const examJson = await examRes.json()
       setEntries(entriesJson.entries || [])
       setSubmissions(subsJson.submissions || [])
+      if (examJson.success && examJson.exam) {
+        setExamDetails(examJson.exam)
+      }
     } catch {}
   }
 
@@ -130,6 +154,28 @@ export default function ExamManager() {
   }
 
   const totalQuestions = useMemo(() => questions.length, [questions])
+
+  const submissionsWithMeta = useMemo(() => {
+    return submissions.map((su: any) => {
+      const relatedEntries = entries.filter((en: any) => en.exam_id === su.exam_id && en.user_id === su.user_id)
+      const violation = relatedEntries.find((en: any) => en.reason)
+      const battery = violation?.battery_level ?? relatedEntries[0]?.battery_level ?? null
+      return {
+        ...su,
+        _hasViolation: !!violation,
+        _violationReason: violation?.reason || null,
+        _batteryLevel: battery,
+      }
+    })
+  }, [submissions, entries])
+
+  const normalizeAnswer = (v: any) => {
+    if (v === undefined || v === null) return ''
+    return String(v)
+      .toLowerCase()
+      .replace(/[\s\.,;:!؟،'"\-_\\/\(\)\[\]\{\}]+/g, '')
+      .trim()
+  }
 
   return (
     <div className="space-y-8">
@@ -171,6 +217,20 @@ export default function ExamManager() {
             </div>
             {questions.map((q, qi)=> (
               <div key={q.id} className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white/70 text-sm">سؤال {qi + 1}</span>
+                  {questions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestions(prev => prev.filter((_, i) => i !== qi))
+                      }}
+                      className="text-xs px-2 py-1 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30"
+                    >
+                      حذف السؤال
+                    </button>
+                  )}
+                </div>
                 <div>
                   <label className="text-white/70 text-sm mb-2 block">نص السؤال</label>
                   <input value={q.text} onChange={e=>{
@@ -353,17 +413,75 @@ export default function ExamManager() {
                   <h4 className="text-white/80 font-bold mb-2 flex items-center gap-2"><CheckCircle className="w-4 h-4"/> النتائج</h4>
                   <div className="max-h-64 overflow-auto">
                     <table className="w-full text-sm">
-                      <thead className="text-gold border-b border-white/10"><tr><th className="p-2 text-right">المستخدم</th><th className="p-2">الدرجة</th><th className="p-2">المدة</th><th className="p-2">التاريخ</th></tr></thead>
+                      <thead className="text-gold border-b border-white/10">
+                        <tr>
+                          <th className="p-2 text-right">المستخدم</th>
+                          <th className="p-2">الدرجة</th>
+                          <th className="p-2">المدة</th>
+                          <th className="p-2">الحالة</th>
+                          <th className="p-2">التاريخ</th>
+                          <th className="p-2">إعادة الامتحان</th>
+                          <th className="p-2">تفاصيل</th>
+                        </tr>
+                      </thead>
                       <tbody>
-                        {submissions.map((su:any)=> (
-                          <tr key={su.id} className="border-b border-white/5">
-                            <td className="p-2 text-white/80">{su.user_id || '—'}</td>
-                            <td className="p-2 text-white/60">{su.score ?? '—'}</td>
-                            <td className="p-2 text-white/60">{su.duration_seconds ? Math.round(su.duration_seconds/60)+' د' : '—'}</td>
-                            <td className="p-2 text-white/60">{new Date(su.created_at).toLocaleString('ar-EG')}</td>
-                          </tr>
-                        ))}
-                        {submissions.length===0 && <tr><td className="p-2 text-white/50" colSpan={4}>لا يوجد</td></tr>}
+                        {submissionsWithMeta.map((su:any)=> {
+                          const hasViolation = su._hasViolation
+                          const statusEl = hasViolation
+                            ? <span className="text-red-400">مخالفة</span>
+                            : <span className="text-green-400">سليم</span>
+                          const canRetry = su.allow_retry === true
+                          return (
+                            <tr key={su.id} className="border-b border-white/5">
+                              <td className="p-2 text-white/80">{su.user_id || '—'}</td>
+                              <td className="p-2 text-white/60">{su.score ?? '—'}</td>
+                              <td className="p-2 text-white/60">{su.duration_seconds ? Math.round(su.duration_seconds/60)+' د' : '—'}</td>
+                              <td className="p-2 text-white/60">{statusEl}</td>
+                              <td className="p-2 text-white/60">{new Date(su.created_at).toLocaleString('ar-EG')}</td>
+                              <td className="p-2">
+                                <button
+                                  onClick={async () => {
+                                    if (!selectedExam) return
+                                    try {
+                                      const res = await fetch('/api/admin/exam-retry', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          userId: su.user_id,
+                                          examId: su.exam_id,
+                                          allowRetry: !canRetry,
+                                        }),
+                                      })
+                                      const json = await res.json().catch(() => ({} as any))
+                                      if (!res.ok || !json?.success) {
+                                        throw new Error(json?.error || 'فشل تحديث حالة الامتحان')
+                                      }
+                                      toast.success(!canRetry ? 'تم السماح للطالب بإعادة الامتحان' : 'تم إلغاء السماح بإعادة الامتحان')
+                                      await loadExamData(selectedExam)
+                                    } catch (e: any) {
+                                      toast.error(e?.message || 'حدث خطأ أثناء تحديث حالة الامتحان')
+                                    }
+                                  }}
+                                  className="px-3 py-1 rounded-lg bg-white/5 text-xs text-white hover:bg-white/15"
+                                >
+                                  {canRetry ? 'منع الإعادة' : 'السماح بالإعادة'}
+                                </button>
+                              </td>
+                              <td className="p-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedSubmission(su)
+                                    setShowCertificate(false)
+                                  }}
+                                  className="px-3 py-1 rounded-lg bg-white/10 text-white hover:bg-white/20 flex items-center gap-1"
+                                >
+                                  <Eye className="w-4 h-4"/> عرض
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {submissionsWithMeta.length===0 && <tr><td className="p-2 text-white/50" colSpan={7}>لا يوجد</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -373,6 +491,206 @@ export default function ExamManager() {
           )}
         </div>
       </div>
+
+      {selectedSubmission && selectedExam && examDetails && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="luxury-card w-full max-w-3xl rounded-2xl p-6 max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-white">تفاصيل محاولة الامتحان</h3>
+              <button
+                onClick={() => { setSelectedSubmission(null); setShowCertificate(false) }}
+                className="px-3 py-1 rounded-lg bg-white/10 text-white hover:bg-white/20"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-6 text-sm text-white/80">
+              <div>الامتحان: <span className="text-white">{selectedExam.title}</span></div>
+              <div>المستخدم: <span className="text-white">{selectedSubmission.user_id || '—'}</span></div>
+              <div>الدرجة: <span className="text-white">{selectedSubmission.score ?? '—'}</span></div>
+              <div>المدة: <span className="text-white">{selectedSubmission.duration_seconds ? Math.round(selectedSubmission.duration_seconds/60)+' د' : '—'}</span></div>
+              <div>التاريخ: <span className="text-white">{new Date(selectedSubmission.created_at).toLocaleString('ar-EG')}</span></div>
+              <div>الحالة:
+                {' '}
+                {selectedSubmission._hasViolation
+                  ? <span className="text-red-400">تم رصد مخالفة ({selectedSubmission._violationReason || 'بدون سبب مسجل'})</span>
+                  : <span className="text-green-400">سليم</span>}
+              </div>
+              <div>
+                نسبة البطارية عند الدخول:
+                {' '}
+                {selectedSubmission._batteryLevel != null
+                  ? <span className="text-white">{selectedSubmission._batteryLevel}%</span>
+                  : <span className="text-white/60">غير متوفرة</span>}
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <h4 className="text-white font-bold mb-2">الإجابات</h4>
+              {(examDetails.questions || []).map((q: any, idx: number) => {
+                const qid = q.id ?? q.qid
+                const given = selectedSubmission.answers?.[qid]
+                const type = q.type || (Array.isArray(q.options) ? 'mcq' : undefined)
+                let isCorrect: boolean | null = null
+                let correctLabel = ''
+                let givenLabel = given !== undefined && given !== null ? String(given) : '—'
+
+                if (type === 'tf') {
+                  const corrBool = typeof q.correct === 'boolean' ? q.correct : String(q.correct).toLowerCase() === 'true'
+                  const givenBool = typeof given === 'boolean' ? given : String(given).toLowerCase() === 'true'
+                  if (given === undefined || given === null) {
+                    isCorrect = null
+                  } else {
+                    isCorrect = givenBool === corrBool
+                  }
+                  correctLabel = corrBool ? 'صح' : 'خطأ'
+                  givenLabel = given === undefined || given === null ? '—' : (givenBool ? 'صح' : 'خطأ')
+                } else if (type === 'essay') {
+                  const acc: any[] = Array.isArray(q.acceptable) ? q.acceptable : []
+                  if (given === undefined || given === null) {
+                    isCorrect = null
+                  } else {
+                    const gNorm = normalizeAnswer(given)
+                    isCorrect = acc.some(a => normalizeAnswer(a) === gNorm)
+                  }
+                  correctLabel = acc.join(' / ')
+                } else {
+                  const corr = q.correct
+                  if (given === undefined || given === null || corr === undefined || corr === null) {
+                    isCorrect = null
+                  } else {
+                    isCorrect = String(given) === String(corr)
+                  }
+                  correctLabel = corr !== undefined && corr !== null ? String(corr) : ''
+                }
+
+                const statusText = isCorrect === null ? 'لم يُجب' : (isCorrect ? 'صحيح' : 'خطأ')
+                const statusColor = isCorrect === null ? 'text-white/60' : (isCorrect ? 'text-green-400' : 'text-red-400')
+
+                return (
+                  <div key={qid || idx} className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1">
+                    <div className="text-white font-bold mb-1">س{idx+1}: {q.text}</div>
+                    <div className={statusColor}>الحالة: {statusText}</div>
+                    <div className="text-white/70 text-sm">إجابة الطالب: <span className="text-white">{givenLabel}</span></div>
+                    {correctLabel && (
+                      <div className="text-white/70 text-sm">الإجابة الصحيحة: <span className="text-green-300">{correctLabel}</span></div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="space-y-4">
+              <button
+                onClick={() => setShowCertificate(v => !v)}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-gold to-yellow-600 text-black font-bold hover:shadow-gold/40 hover:shadow-lg"
+              >
+                {showCertificate ? 'إخفاء الشهادة' : 'عرض الشهادة'}
+              </button>
+
+              {showCertificate && (
+                <div className="mt-4 relative mx-auto w-full max-w-4xl rounded-[28px] bg-gradient-to-br from-[#fff9e6] via-[#ffefc2] to-[#facc4d] border border-amber-300/95 shadow-[0_26px_80px_rgba(250,204,21,0.55)] text-slate-900 overflow-hidden">
+                  {/* إطار داخلي فاخر وبسيط */}
+                  <div className="absolute inset-3 rounded-[24px] border border-amber-300/90 pointer-events-none" />
+                  <div className="absolute inset-6 rounded-[20px] border border-amber-200/85 pointer-events-none" />
+                  <div className="absolute inset-0 opacity-[0.26] pointer-events-none bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.9)_0,_transparent_55%),radial-gradient(circle_at_bottom,_rgba(245,158,11,0.85)_0,_transparent_55%)]" />
+
+                  {/* وترمارك فاخر */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-4xl sm:text-6xl font-black tracking-[0.32em] uppercase text-amber-200/55">MOHRAM</div>
+                  </div>
+
+                  {/* شريط علوي باسم الأكاديمية */}
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 px-6 sm:px-10 py-1.5 bg-slate-900/95 text-amber-200 text-[11px] sm:text-xs tracking-[0.3em] uppercase rounded-full shadow-[0_10px_30px_rgba(15,23,42,0.7)] flex items-center justify-center gap-2 text-center">
+                    <span className="text-sm">✦</span>
+                    <span>AHMED MOHRAM ACADEMY</span>
+                    <span className="text-sm">✦</span>
+                  </div>
+
+                  {/* محتوى الشهادة */}
+                  <div className="relative z-10 px-6 sm:px-12 pt-16 pb-10 sm:pt-20 sm:pb-12 space-y-6 sm:space-y-8">
+                    {/* رأس الشهادة في المنتصف */}
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 border-[3px] border-white/80 shadow-[0_0_35px_rgba(250,204,21,0.9)] flex items-center justify-center">
+                        <span className="text-3xl sm:text-4xl">👑</span>
+                      </div>
+                      <div className="text-center space-y-1">
+                        <div className="text-[11px] sm:text-xs uppercase tracking-[0.35em] text-slate-600">certificate of excellence</div>
+                        <div className="text-3xl sm:text-4xl font-extrabold text-slate-900">شهادة تميز استثنائية</div>
+                        <div className="text-xs sm:text-sm text-slate-600">تُمنح بكل فخر من</div>
+                        <div className="text-lg sm:text-xl font-black text-slate-900">أحمد محرم</div>
+                      </div>
+                    </div>
+
+                    {/* رقم الشهادة واسم الامتحان */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] sm:text-xs text-slate-700">
+                      <div>
+                        رقم الشهادة:
+                        <span className="font-semibold"> #{selectedSubmission.id?.slice?.(0, 8) || '—'}</span>
+                      </div>
+                      <div>
+                        الامتحان:
+                        <span className="font-semibold"> {selectedExam.title}</span>
+                      </div>
+                    </div>
+
+                    {/* فقرة تمهيدية */}
+                    <div className="text-center text-[11px] sm:text-sm text-slate-700 leading-relaxed max-w-2xl mx-auto">
+                      هذه الشهادة الفاخرة تُمنح للطلاب الذين حققوا أداءً مميزاً في امتحانات أحمد محرم، تقديراً لاجتهادهم وتفوقهم المستمر.
+                    </div>
+
+                    {/* اسم الطالب والدرجة */}
+                    <div className="grid md:grid-cols-2 gap-6 text-sm sm:text-base items-stretch">
+                      <div className="space-y-3 text-center md:text-right">
+                        <div className="text-slate-700 text-sm sm:text-base">تُمنح هذه الشهادة إلى</div>
+                        <div className="text-2xl sm:text-3xl font-bold tracking-wide text-slate-900">
+                          {selectedSubmission.user_id || 'الطالب المميز'}
+                        </div>
+                        <div className="text-slate-700 mt-1 text-sm sm:text-base">تقديراً لاجتيازه بنجاح امتحان</div>
+                        <div className="text-lg sm:text-xl font-semibold text-slate-900">
+                          {selectedExam.title}
+                        </div>
+                      </div>
+                      <div className="space-y-3 text-center md:text-left">
+                        <div className="text-slate-700 text-sm sm:text-base">الدرجة النهائية</div>
+                        <div className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-white/85 border border-amber-200 shadow-sm">
+                          <span className="text-amber-600 text-xl sm:text-2xl">🏆</span>
+                          <span className="text-xl sm:text-2xl font-extrabold text-slate-900">
+                            {selectedSubmission.score ?? '—'} / {(examDetails.questions || []).length || '—'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] sm:text-sm text-slate-700 leading-relaxed">
+                          هذه الدرجة تعكس مستوى عالياً من التفوق والانضباط، وتضع صاحبها ضمن نخبة المتفوقين على المنصة.
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* التاريخ والتوقيع */}
+                    <div className="flex flex-wrap items-center justify-between gap-6 text-[11px] sm:text-sm mt-2 border-t border-amber-200 pt-4">
+                      <div className="flex-1 min-w-[140px]">
+                        <div className="font-semibold text-slate-800 mb-1">📅 التاريخ</div>
+                        <div className="text-slate-700">
+                          {new Date(selectedSubmission.created_at).toLocaleDateString('ar-EG')}
+                        </div>
+                      </div>
+                      <div className="hidden sm:block w-px h-12 bg-amber-200/70" />
+                      <div className="flex-1 min-w-[140px] text-center sm:text-right">
+                        <div className="font-semibold text-slate-800 mb-1">✍️ التوقيع</div>
+                        <div className="text-lg sm:text-xl font-bold text-slate-900">أحمد محرم</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 text-[10px] sm:text-[11px] text-slate-600 text-center leading-relaxed">
+                      هذه الشهادة تصدر إلكترونياً من منصة أحمد محرم التعليمية، ويمكن التحقق من صحتها عبر الرجوع إلى سجلات المنصة.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

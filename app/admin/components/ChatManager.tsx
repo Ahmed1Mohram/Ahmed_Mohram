@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Send, MessageCircle, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { supabase } from '@/components/providers'
 
 export default function ChatManager() {
   const [conversations, setConversations] = useState<any[]>([])
@@ -13,6 +14,10 @@ export default function ChatManager() {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [userOnline, setUserOnline] = useState(false)
+  const [userTyping, setUserTyping] = useState(false)
+  const channelRef = useRef<any>(null)
+  const typingTimeoutRef = useRef<any>(null)
 
   const loadConversations = async () => {
     try {
@@ -22,15 +27,15 @@ export default function ChatManager() {
     } catch {}
   }
 
-  const loadMessages = async (userId: string) => {
-    setLoading(true)
+  const loadMessages = async (userId: string, silent: boolean = false) => {
+    if (!silent) setLoading(true)
     try {
       const res = await fetch(`/api/messages?userId=${userId}&markRead=1`, { cache: 'no-store' })
       const data = await res.json()
       setMessages(data.messages || [])
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     } catch {}
-    setLoading(false)
+    if (!silent) setLoading(false)
   }
 
   useEffect(() => {
@@ -41,9 +46,61 @@ export default function ChatManager() {
 
   useEffect(() => {
     if (!activeUser) return
-    loadMessages(activeUser.user.id)
-    const id = setInterval(() => loadMessages(activeUser.user.id), 3000)
+    loadMessages(activeUser.user.id, false)
+    const id = setInterval(() => loadMessages(activeUser.user.id, true), 3000)
     return () => clearInterval(id)
+  }, [activeUser])
+
+  useEffect(() => {
+    const userId = activeUser?.user?.id
+    if (!userId) {
+      setUserOnline(false)
+      setUserTyping(false)
+      if (channelRef.current) {
+        try {
+          channelRef.current.send({ type: 'broadcast', event: 'status', payload: { role: 'admin', userId, online: false } })
+        } catch {}
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+      return
+    }
+
+    const channel = supabase.channel(`support-chat-${userId}`, { config: { broadcast: { self: true } } })
+    channelRef.current = channel
+
+    channel
+      .on('broadcast', { event: 'status' }, (payload: any) => {
+        const data = (payload?.payload || {}) as any
+        if (data?.role === 'user' && data?.userId === userId) {
+          setUserOnline(!!data.online)
+        }
+      })
+      .on('broadcast', { event: 'typing' }, (payload: any) => {
+        const data = (payload?.payload || {}) as any
+        if (data?.role === 'user' && data?.userId === userId) {
+          setUserTyping(!!data.typing)
+        }
+      })
+      .subscribe((status: any) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            channel.send({ type: 'broadcast', event: 'status', payload: { role: 'admin', userId, online: true } })
+          } catch {}
+        }
+      })
+
+    return () => {
+      setUserOnline(false)
+      setUserTyping(false)
+      if (channelRef.current) {
+        try {
+          channelRef.current.send({ type: 'broadcast', event: 'status', payload: { role: 'admin', userId, online: false } })
+        } catch {}
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
   }, [activeUser])
 
   const send = async () => {
@@ -57,10 +114,28 @@ export default function ChatManager() {
       })
       if (!res.ok) throw new Error('send failed')
       setText('')
-      loadMessages(userId)
+      loadMessages(userId, true)
     } catch {
       toast.error('فشل الإرسال')
     }
+  }
+
+  const handleTextChange = (value: string) => {
+    setText(value)
+    const userId = activeUser?.user?.id
+    if (!userId || !channelRef.current) return
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    try {
+      channelRef.current.send({ type: 'broadcast', event: 'typing', payload: { role: 'admin', userId, typing: true } })
+    } catch {}
+    typingTimeoutRef.current = setTimeout(() => {
+      try {
+        if (!channelRef.current) return
+        channelRef.current.send({ type: 'broadcast', event: 'typing', payload: { role: 'admin', userId, typing: false } })
+      } catch {}
+    }, 2000)
   }
 
   const filtered = conversations.filter(c => !q || c.user.full_name?.toLowerCase().includes(q.toLowerCase()) || c.user.email?.toLowerCase().includes(q.toLowerCase()) || c.user.phone_number?.includes(q))
@@ -96,7 +171,12 @@ export default function ChatManager() {
           </div>
         ) : (
           <>
-            <div className="font-bold text-white mb-3">{activeUser.user.full_name || 'مستخدم'} - {activeUser.user.email || activeUser.user.phone_number}</div>
+            <div className="mb-3">
+              <div className="font-bold text-white">{activeUser.user.full_name || 'مستخدم'} - {activeUser.user.email || activeUser.user.phone_number}</div>
+              <div className="text-xs text-white/60 mt-1">
+                {userTyping ? 'الطالب يكتب الآن...' : userOnline ? 'متصل الآن' : 'غير متصل حالياً'}
+              </div>
+            </div>
             <div className="flex-1 overflow-auto space-y-2">
               {loading ? (
                 <div className="text-center text-white/50">جاري التحميل...</div>
@@ -104,14 +184,18 @@ export default function ChatManager() {
                 messages.map((m, i) => (
                   <div key={i} className={`max-w-[80%] rounded-2xl px-3 py-2 ${m.sender === 'admin' ? 'ml-auto bg-gold text-black' : 'mr-auto bg-white/10 text-white'}`}>
                     <div className="text-sm whitespace-pre-wrap">{m.text}</div>
-                    <div className="text-[10px] opacity-60 mt-0.5">{new Date(m.created_at).toLocaleString('ar-EG')}</div>
+                    <div className="text-[10px] opacity-60 mt-0.5">
+                      {new Date(m.created_at).toLocaleString('ar-EG')}
+                      {' '}
+                      {m.sender === 'admin' ? (m.read_by_user ? 'شوهد' : 'لم يُقرأ بعد') : (m.read_by_admin ? 'مقروء' : 'غير مقروء')}
+                    </div>
                   </div>
                 ))
               )}
               <div ref={bottomRef} />
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==='Enter' && send()} placeholder="اكتب رسالة..." className="flex-1 px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white" />
+              <input value={text} onChange={e => handleTextChange(e.target.value)} onKeyDown={e => e.key==='Enter' && send()} placeholder="اكتب رسالة..." className="flex-1 px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white" />
               <button onClick={send} className="px-4 py-3 bg-gradient-to-r from-gold to-yellow-600 text-black rounded-xl font-bold flex items-center gap-2"><Send className="w-4 h-4" /> إرسال</button>
             </div>
           </>

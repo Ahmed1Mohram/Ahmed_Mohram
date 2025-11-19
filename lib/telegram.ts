@@ -73,6 +73,7 @@ export async function getTemplate(key: string): Promise<string> {
 
 export const defaultTemplates: Record<string, string> = {
   subject_created: 'تم إضافة مادة جديدة: {{title}}',
+  exam_created: 'تم إضافة امتحان جديد: {{title}} ضمن مادة {{subject}}',
   lecture_created: 'تم إضافة محاضرة جديدة: {{title}} ضمن مادة {{subject}}',
   content_created: 'تم إضافة محتوى جديد ({{type}}): {{title}} ضمن محاضرة {{lecture}}',
   broadcast: '{{text}}'

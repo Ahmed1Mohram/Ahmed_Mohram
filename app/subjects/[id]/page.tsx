@@ -24,6 +24,10 @@ interface Lecture {
   content_count?: number
   completed?: boolean
   progress?: number
+  has_video?: boolean
+  has_audio?: boolean
+  has_pdf?: boolean
+  has_text?: boolean
 }
 
 // نوع المادة
@@ -230,21 +234,37 @@ export default function SubjectLecturesPage() {
 
   const fetchLectures = async () => {
     try {
-      const { data, error } = await supabase
-        .from('lectures')
-        .select(`
-          *,
-          lecture_content(id, type)
-        `)
-        .eq('subject_id', subjectId)
-        .eq('is_active', true)
-        .order('order_index')
-
-      if (error) throw error
-
-      const lecturesWithData = data?.map(lecture => ({
+      setLoading(true)
+      
+      // استخدام واجهة API المباشرة الجديدة لجلب المحاضرات
+      const response = await fetch(`/api/subject-lectures?subject_id=${subjectId}`)
+      const data = await response.json()
+      
+      console.log('نتيجة استدعاء API المحاضرات:', data)
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'فشل جلب المحاضرات')
+      }
+      
+      const lectures = data.lectures || []
+      
+      // إضافة تنميط لمنع أخطاء TypeScript
+      interface LectureItem {
+        id: string;
+        title: string;
+        description?: string;
+        subject_id?: string;
+        order_index?: number;
+        content_count?: number;
+        duration_minutes?: number;
+        is_free?: boolean;
+        created_at?: string;
+        [key: string]: any; // للسماح بأي حقول أخرى
+      }
+      
+      const lecturesWithData = lectures.map((lecture: LectureItem) => ({
         ...lecture,
-        content_count: lecture.lecture_content?.length || 0,
+        content_count: lecture.content_count || 0,
         progress: Math.floor(Math.random() * 100), // مؤقت
         completed: Math.random() > 0.7 // مؤقت
       }))
@@ -333,8 +353,27 @@ export default function SubjectLecturesPage() {
   }
 
   const hasType = (lecture: Lecture | null, type: 'video' | 'audio' | 'pdf' | 'text') => {
-    if (!lecture || !lecture.lecture_content) return false
-    return lecture.lecture_content.some(c => (c.type || '').toLowerCase() === type)
+    if (!lecture) return false
+
+    // أولوية لاستخدام lecture_content القادم من قاعدة البيانات (مع النوع لكل عنصر)
+    if (lecture.lecture_content && Array.isArray(lecture.lecture_content)) {
+      return lecture.lecture_content.some((c: any) => (c.type || '').toLowerCase() === type)
+    }
+
+    // في حالة عدم توفر lecture_content، نستخدم الحقول المنطقية القادمة من API
+    const anyLecture: any = lecture
+    switch (type) {
+      case 'video':
+        return !!anyLecture.has_video
+      case 'audio':
+        return !!anyLecture.has_audio
+      case 'pdf':
+        return !!anyLecture.has_pdf
+      case 'text':
+        return !!anyLecture.has_text
+      default:
+        return false
+    }
   }
 
   const openLecture = (lecture: Lecture | null, type: 'video' | 'audio' | 'pdf' | 'text') => {
@@ -459,14 +498,19 @@ export default function SubjectLecturesPage() {
               )}
               
               {/* Stats */}
-              <div className="flex flex-wrap gap-6 text-white">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5" />
-                  <span>{lectures.length} محاضرة</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5" />
-                  <span>{getTotalDuration()}</span>
+              <div className="flex items-center justify-end gap-2">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <BookOpen className="w-4 h-4 text-gold" />
+                    <span className="text-sm">{lectures.length} محاضرة</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-4 h-4 text-gold" />
+                    <span className="text-sm">{getTotalDuration()}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-blue-400">
+                    <span className="text-sm">الترتيب: {lectures[0]?.order_index || '?'}</span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-5 h-5" />
@@ -505,7 +549,7 @@ export default function SubjectLecturesPage() {
                       <div className="absolute -inset-[1px] rounded-[inherit] bg-gradient-to-r from-gold/30 to-yellow-500/20 opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"></div>
                       {/* Lecture Number */}
                       <div className="absolute top-3 left-3 z-10 w-10 h-10 rounded-full bg-gold/30 border border-gold/50 backdrop-blur-sm flex items-center justify-center text-gold font-bold shadow-md shadow-gold/20">
-                        {lecture.order_index}
+                        {lecture.order_index || index + 1}
                       </div>
                       
                       {/* Lock/Free Badge */}
@@ -647,45 +691,101 @@ export default function SubjectLecturesPage() {
               <button
                 onClick={() => openLecture(pickerLecture, 'video')}
                 disabled={!hasType(pickerLecture, 'video')}
-                className={`rounded-2xl p-6 border-2 bg-gradient-to-br from-gold/10 via-black/60 to-black shadow-xl transition-all ${hasType(pickerLecture,'video') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
+                className={`relative overflow-hidden rounded-2xl border-2 shadow-xl transition-all group ${hasType(pickerLecture,'video') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
               >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
-                  <Video className="w-6 h-6" />
+                <div className="absolute inset-0">
+                  {pickerLecture.thumbnail_url ? (
+                    <img
+                      src={pickerLecture.thumbnail_url}
+                      alt={pickerLecture.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gold/10 via-black/60 to-black" />
+                  )}
+                  <div className="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-colors" />
                 </div>
-                <h4 className="text-lg font-bold text-white">فيديو</h4>
+                <div className="relative p-6 flex flex-col items-start">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
+                    <Video className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-lg font-bold text-white">فيديو</h4>
+                </div>
               </button>
               {/* ريكورد */}
               <button
                 onClick={() => openLecture(pickerLecture, 'audio')}
                 disabled={!hasType(pickerLecture, 'audio')}
-                className={`rounded-2xl p-6 border-2 bg-gradient-to-br from-gold/10 via-black/60 to-black shadow-xl transition-all ${hasType(pickerLecture,'audio') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
+                className={`relative overflow-hidden rounded-2xl border-2 shadow-xl transition-all group ${hasType(pickerLecture,'audio') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
               >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
-                  <Headphones className="w-6 h-6" />
+                <div className="absolute inset-0">
+                  {pickerLecture.thumbnail_url ? (
+                    <img
+                      src={pickerLecture.thumbnail_url}
+                      alt={pickerLecture.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gold/10 via-black/60 to-black" />
+                  )}
+                  <div className="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-colors" />
                 </div>
-                <h4 className="text-lg font-bold text-white">ريكورد</h4>
+                <div className="relative p-6 flex flex-col items-start">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
+                    <Headphones className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-lg font-bold text-white">ريكورد</h4>
+                </div>
               </button>
               {/* PDF */}
               <button
                 onClick={() => openLecture(pickerLecture, 'pdf')}
                 disabled={!hasType(pickerLecture, 'pdf')}
-                className={`rounded-2xl p-6 border-2 bg-gradient-to-br from-gold/10 via-black/60 to-black shadow-xl transition-all ${hasType(pickerLecture,'pdf') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
+                className={`relative overflow-hidden rounded-2xl border-2 shadow-xl transition-all group ${hasType(pickerLecture,'pdf') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
               >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
-                  <FileText className="w-6 h-6" />
+                <div className="absolute inset-0">
+                  {pickerLecture.thumbnail_url ? (
+                    <img
+                      src={pickerLecture.thumbnail_url}
+                      alt={pickerLecture.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gold/10 via-black/60 to-black" />
+                  )}
+                  <div className="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-colors" />
                 </div>
-                <h4 className="text-lg font-bold text-white">PDF</h4>
+                <div className="relative p-6 flex flex-col items-start">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-lg font-bold text-white">PDF</h4>
+                </div>
               </button>
               {/* شرح الدكتور */}
               <button
                 onClick={() => openLecture(pickerLecture, 'text')}
                 disabled={!hasType(pickerLecture, 'text')}
-                className={`rounded-2xl p-6 border-2 bg-gradient-to-br from-gold/10 via-black/60 to-black shadow-xl transition-all ${hasType(pickerLecture,'text') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
+                className={`relative overflow-hidden rounded-2xl border-2 shadow-xl transition-all group ${hasType(pickerLecture,'text') ? 'border-gold/40 hover:border-gold/60 hover:shadow-gold/30' : 'border-white/10 opacity-50 cursor-not-allowed'}`}
               >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
-                  <BookOpen className="w-6 h-6" />
+                <div className="absolute inset-0">
+                  {pickerLecture.thumbnail_url ? (
+                    <img
+                      src={pickerLecture.thumbnail_url}
+                      alt={pickerLecture.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gold/10 via-black/60 to-black" />
+                  )}
+                  <div className="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-colors" />
                 </div>
-                <h4 className="text-lg font-bold text-white">شرح الدكتور</h4>
+                <div className="relative p-6 flex flex-col items-start">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold/30 to-yellow-600/20 border border-gold/40 flex items-center justify-center text-gold mb-4">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-lg font-bold text-white">شرح الدكتور</h4>
+                </div>
               </button>
             </div>
           </div>

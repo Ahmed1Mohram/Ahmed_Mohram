@@ -36,11 +36,23 @@ export default function WaitingApprovalPage() {
       
       if (data.status === 'approved') {
         setStatus('approved')
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 3000)
+
+        // مزامنة الكوكيز مع الحالة الجديدة حتى يسمح middleware بالدخول للباقات
+        if (typeof document !== 'undefined') {
+          const maxAge = 24 * 60 * 60
+          document.cookie = `status=approved; path=/; max-age=${maxAge}; SameSite=Lax`
+          if (data.subscription_status) {
+            document.cookie = `subscription_status=${encodeURIComponent(data.subscription_status)}; path=/; max-age=${maxAge}; SameSite=Lax`
+          }
+        }
       } else if (data.status === 'rejected') {
         setStatus('rejected')
+
+        if (typeof document !== 'undefined') {
+          const maxAge = 24 * 60 * 60
+          document.cookie = `status=rejected; path=/; max-age=${maxAge}; SameSite=Lax`
+          document.cookie = `subscription_status=inactive; path=/; max-age=${maxAge}; SameSite=Lax`
+        }
       }
     } catch (error) {
       console.error('Error checking status:', error)
@@ -138,20 +150,25 @@ export default function WaitingApprovalPage() {
               animate={{ scale: 1 }}
               className="w-24 h-24 mx-auto mb-6"
             >
-              <CheckCircle className="w-full h-full text-green-500" />
+              <CheckCircle className="w-full h-full text-gold" />
             </motion.div>
             
-            <h1 className="text-3xl font-bold text-green-500 mb-4">
-              تمت الموافقة! 🎉
+            <h1 className="text-3xl font-bold text-gold mb-4">
+              ابسط يا معلم، أحمد وافق عليك 🎉
             </h1>
             
             <p className="text-white/80 mb-6">
-              مبروك! تم قبول اشتراكك بنجاح
+              مبروك! تم قبولك في منصة أحمد محرم
               <br />
-              جاري تحويلك للمنصة...
+              اختر الآن الباقة المناسبة لبدء رحلتك
             </p>
 
-            <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <button
+              onClick={() => router.push('/subscription')}
+              className="w-full bg-gradient-to-r from-gold to-yellow-500 text-black py-3 rounded-xl font-bold hover:shadow-lg hover:shadow-gold/30 transition-all"
+            >
+              الذهاب إلى صفحة الباقات
+            </button>
           </>
         )}
 

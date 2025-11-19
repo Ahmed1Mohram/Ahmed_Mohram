@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { CheckCircle, Clock, Phone, MessageCircle, Shield, Crown, Upload, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/components/providers'
@@ -12,6 +12,7 @@ const WHATSAPP_NUMBER = '201005209667'
 
 export default function SubscriptionPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
   const [packages, setPackages] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,25 +24,81 @@ export default function SubscriptionPage() {
   const [sendingReceipt, setSendingReceipt] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // التحقق من حالة تسجيل الدخول وجلب الباقات
+  // حالة الاشتراك للمستخدم الحالي
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ active: boolean; status: string; days_left?: number } | null>(null)
+
+  // إنذار عند محاولة الدخول لمحتوى مدفوع بدون اشتراك
+  useEffect(() => {
+    const warn = searchParams.get('warn')
+    if (warn === '1' && subscriptionStatus && subscriptionStatus.status !== 'active') {
+      toast.error('محاولة الدخول للمحتوى بدون اشتراك تعرّض حسابك للحظر. هذا إنذار، يرجى اختيار باقة أولاً.')
+    }
+  }, [searchParams, subscriptionStatus])
+
+  // التحقق من حالة تسجيل الدخول وجلب الباقات أو التوجيه حسب حالة الاشتراك
   useEffect(() => {
     if (authLoading) return
-    
-    if (user && user.subscription_status === 'active') {
-      router.push('/dashboard')
-      return
-    }
-    
-    // السماح بعرض صفحة الباقات حتى لو لم يكن كائن المستخدم محملاً بعد
-    fetchPackages()
-    // تحديد حالة تسجيل الدخول لاستخدامها في تعطيل الأزرار
-    try {
-      if (user) setIsLoggedIn(true)
-      else if (typeof localStorage !== 'undefined') {
-        const saved = localStorage.getItem('user')
-        setIsLoggedIn(!!saved)
+
+    const init = async () => {
+      // تحديد حالة تسجيل الدخول لاستخدامها في تعطيل الأزرار
+      try {
+        if (user) setIsLoggedIn(true)
+        else if (typeof localStorage !== 'undefined') {
+          const saved = localStorage.getItem('user')
+          setIsLoggedIn(!!saved)
+        }
+      } catch {}
+
+      // تحديد معرف المستخدم الفعّال
+      let effectiveUserId = user?.id as string | undefined
+      if (!effectiveUserId && typeof localStorage !== 'undefined') {
+        try {
+          const storedUserStr = localStorage.getItem('user')
+          if (storedUserStr) {
+            const storedUser = JSON.parse(storedUserStr)
+            effectiveUserId = storedUser?.id
+          }
+        } catch {}
       }
-    } catch {}
+
+      // إذا لم يكن هناك مستخدم، نعرض الباقات فقط
+      if (!effectiveUserId) {
+        fetchPackages()
+        return
+      }
+
+      try {
+        const res = await fetch('/api/check-subscription', {
+          headers: {
+            'x-user-id': effectiveUserId
+          }
+        })
+        const data: any = await res.json().catch(() => null)
+
+        if (data) {
+          const newStatus = data.subscription_status || 'inactive'
+          setSubscriptionStatus({
+            active: !!data.active,
+            status: newStatus,
+            days_left: typeof data.days_left === 'number' ? data.days_left : undefined
+          })
+
+          try {
+            if (typeof document !== 'undefined') {
+              const maxAge = 24 * 60 * 60
+              document.cookie = `subscription_status=${encodeURIComponent(newStatus)}; path=/; max-age=${maxAge}; SameSite=Lax`
+            }
+          } catch {}
+        }
+      } catch (error) {
+        console.error('Error checking subscription on subscription page:', error)
+      }
+
+      // في جميع الحالات غير النشطة، نظهر كروت الباقات للتجديد / الاشتراك
+      fetchPackages()
+    }
+
+    init()
   }, [user, authLoading, router])
 
   // جلب الباقات المتاحة
@@ -351,29 +408,77 @@ export default function SubscriptionPage() {
           </button>
         </motion.div>
 
-        {/* Packages Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-          {loading ? (
-            // حالة التحميل
-            Array(4).fill(0).map((_, index) => (
-              <div key={index} className="h-[400px] bg-white/5 rounded-2xl animate-pulse"></div>
-            ))
-          ) : packages.length === 0 ? (
-            // لا توجد باقات
-            <div className="col-span-4 text-center py-12">
-              <p className="text-white/60 text-lg">لا توجد باقات متاحة حاليًا. يرجى المحاولة لاحقًا.</p>
+        {subscriptionStatus && subscriptionStatus.status === 'active' && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80 px-4">
+            <div className="max-w-md w-full">
+              <div className="rounded-3xl p-8 bg-gradient-to-br from-gold to-yellow-500 text-black shadow-2xl border-2 border-gold">
+                <div className="flex flex-col items-center text-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-black/10 flex items-center justify-center mb-1">
+                    <CheckCircle className="w-8 h-8 text-black" />
+                  </div>
+                  <h2 className="text-3xl font-extrabold mb-1">تم قبولك!</h2>
+                  <p className="text-black/80 mb-2 text-sm sm:text-base">
+                    تم تفعيل اشتراكك بنجاح، يمكنك الآن الدخول إلى لوحة التحكم ومشاهدة جميع المحاضرات والمحتوى داخل المنصة.
+                  </p>
+                  <button
+                    onClick={() => router.push('/dashboard')}
+                    className="mt-2 w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-gold text-black font-bold text-lg hover:shadow-lg hover:shadow-black/30 transition-all"
+                  >
+                    تم قبولك
+                  </button>
+                </div>
+              </div>
             </div>
-          ) : (
-            // عرض الباقات
-            packages.map((pkg, index) => (
-              <motion.div
-                key={pkg.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -10, scale: 1.02 }}
-                className="relative"
-              >
+          </div>
+        )}
+
+        {subscriptionStatus && subscriptionStatus.status === 'expired' && (
+          <div className="max-w-3xl mx-auto mb-10">
+            <div className="luxury-card rounded-2xl p-6 border-2 border-red-500/60 bg-red-950/40">
+              <div className="flex items-start gap-4">
+                <div className="mt-1">
+                  <Clock className="w-8 h-8 text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">انتهى اشتراكك</h2>
+                  <p className="text-white/80 mb-2">
+                    انتهت مدة اشتراكك في المنصة. لإعادة الوصول لجميع المحاضرات والمحتوى، يرجى اختيار باقة وتجديد الاشتراك.
+                  </p>
+                  {typeof subscriptionStatus.days_left === 'number' && subscriptionStatus.days_left <= 0 && (
+                    <p className="text-white/60 text-sm">
+                      لن تتمكن من استخدام المنصة إلا بعد تجديد الاشتراك.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Packages Grid */}
+        {(!subscriptionStatus || subscriptionStatus.status !== 'active') && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            {loading ? (
+              // حالة التحميل
+              Array(4).fill(0).map((_, index) => (
+                <div key={index} className="h-[400px] bg-white/5 rounded-2xl animate-pulse"></div>
+              ))
+            ) : packages.length === 0 ? (
+              // لا توجد باقات
+              <div className="col-span-4 text-center py-12">
+                <p className="text-white/60 text-lg">لا توجد باقات متاحة حاليًا. يرجى المحاولة لاحقًا.</p>
+              </div>
+            ) : (
+              // عرض الباقات
+              packages.map((pkg, index) => (
+                <motion.div
+                  key={pkg.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  whileHover={{ y: -10, scale: 1.02 }}
+                  className="relative"
+                >
                 {pkg.popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
                     <span className="bg-gradient-to-r from-gold to-yellow-400 text-black px-4 py-1 rounded-full text-sm font-bold flex items-center gap-1">
@@ -399,7 +504,10 @@ export default function SubscriptionPage() {
                           </div>
                           <div className="text-4xl font-bold gradient-text mb-1 flex items-center gap-2">
                             {pkg.discountPrice} جنيه
-                            <span className="text-sm bg-gradient-to-r from-gold to-yellow-500 text-black font-extrabold px-2.5 py-1 rounded-full border border-gold/50">
+                            <span
+                              className="text-sm bg-gradient-to-r from-gold to-yellow-500 font-extrabold px-2.5 py-1 rounded-full border border-gold/50"
+                              style={{ color: '#000' }}
+                            >
                               {pkg.discountPercent}% خصم
                             </span>
                           </div>
@@ -431,9 +539,8 @@ export default function SubscriptionPage() {
                     </ul>
 
                     <button
-                      onClick={() => isLoggedIn ? handleSelectPackage(pkg) : (toast.error('يرجى تسجيل الدخول لاختيار الباقة'), router.push('/login'))}
-                      disabled={!isLoggedIn}
-                      className={`w-full py-3.5 rounded-lg font-bold transition-all relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed ${
+                      onClick={() => handleSelectPackage(pkg)}
+                      className={`w-full py-3.5 rounded-lg font-bold transition-all relative overflow-hidden group ${
                         pkg.popular 
                           ? 'bg-gradient-to-r from-gold to-yellow-500 text-black hover:shadow-lg hover:shadow-gold/50' 
                           : 'border-2 border-gold/50 bg-black text-gold hover:bg-gold/10'
@@ -452,6 +559,7 @@ export default function SubscriptionPage() {
             ))
           )}
         </div>
+        )}
 
         {/* Features */}
         <motion.div
@@ -578,11 +686,17 @@ export default function SubscriptionPage() {
                 <button
                   onClick={handlePayment}
                   disabled={sendingReceipt}
-                  className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:shadow-lg hover:shadow-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-gold to-yellow-500 text-black py-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:shadow-lg hover:shadow-gold/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <MessageCircle className="w-6 h-6" />
-                  {sendingReceipt ? 'جاري الإرسال...' : 'إرسال الإيصال عبر WhatsApp'}
+                  {sendingReceipt ? 'جاري الإرسال...' : 'إرسال الإيصال'}
                 </button>
+
+                {sendingReceipt && (
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full w-full bg-gradient-to-r from-gold to-yellow-400 rounded-full animate-[loading-bar_1.2s_ease-in-out_infinite]" />
+                  </div>
+                )}
 
                 <button
                   onClick={() => setShowPaymentModal(false)}

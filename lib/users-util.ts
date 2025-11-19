@@ -53,12 +53,6 @@ export async function ensureUsersTableExists(): Promise<boolean> {
       const { error } = await supabaseAdmin.rpc('exec', { sql: SQL_CREATE_USERS });
       createError = error;
       
-      // Ensure password_plain column exists
-      try {
-        const SQL_ALTER = `ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS password_plain TEXT;`;
-        await supabaseAdmin.rpc('exec', { sql: SQL_ALTER });
-      } catch {}
-      
       if (error) {
         console.warn('Error using RPC to create users table:', error);
       } else {
@@ -238,6 +232,7 @@ export async function ensureAdminUserExists(): Promise<boolean> {
         id: authUser.user.id,
         email: adminEmail,
         full_name: 'مسؤول النظام',
+        phone_number: '01000000000',
         role: 'admin',
         status: 'approved',
         subscription_status: 'active',

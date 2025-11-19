@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
           pass_threshold INT NOT NULL DEFAULT 60,
           is_published BOOLEAN NOT NULL DEFAULT FALSE,
           questions JSONB NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW()
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `
       await supabaseAdmin.rpc('exec', { sql: SQL })
@@ -30,7 +31,8 @@ export async function GET(req: NextRequest) {
           ADD COLUMN IF NOT EXISTS pass_threshold INT DEFAULT 60,
           ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS questions JSONB,
-          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+          ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
       `
       await supabaseAdmin.rpc('exec', { sql: ALTER })
       try { await supabaseAdmin.rpc('reload_schema_cache'); } catch {}
@@ -83,7 +85,8 @@ export async function POST(req: NextRequest) {
           pass_threshold INT NOT NULL DEFAULT 60,
           is_published BOOLEAN NOT NULL DEFAULT FALSE,
           questions JSONB NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW()
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `
       await supabaseAdmin.rpc('exec', { sql: SQL })
@@ -95,7 +98,8 @@ export async function POST(req: NextRequest) {
           ADD COLUMN IF NOT EXISTS pass_threshold INT DEFAULT 60,
           ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS questions JSONB,
-          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+          ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
       `
       await supabaseAdmin.rpc('exec', { sql: ALTER })
       try { await supabaseAdmin.rpc('reload_schema_cache'); } catch {}

@@ -277,16 +277,61 @@ export default function ModernLoginPage() {
           return;
         }
         
-        const subResponse = await fetch('/api/check-subscription');
-        if (subResponse.ok && result.success) {
+        const subResponse = await fetch('/api/check-subscription', {
+          headers: {
+            'x-user-id': result.user.id
+          }
+        });
+
+        if (result.success) {
+          let subscriptionData: any = null;
+          if (subResponse.ok) {
+            try {
+              subscriptionData = await subResponse.json();
+            } catch (e) {
+              console.error('فشل قراءة بيانات الاشتراك:', e);
+            }
+          }
+          
+          console.log('حالة الاشتراك بعد تسجيل الدخول:', subscriptionData);
+          
+          let isActive = false;
+          let isExpired = false;
+
+          if (subscriptionData) {
+            isActive = subscriptionData.active === true || subscriptionData.subscription_status === 'active';
+            isExpired = subscriptionData.subscription_status === 'expired' || (
+              subscriptionData && subscriptionData.active === false &&
+              typeof subscriptionData.days_left === 'number' && subscriptionData.days_left <= 0
+            );
+          } else {
+            // في حالة فشل API أو عدم توفر بيانات، اعتمد على حالة الاشتراك القادمة من قاعدة البيانات مباشرة
+            isActive = result.user?.subscription_status === 'active';
+          }
+          
+          // تحديث حالة الاشتراك في الكوكيز و localStorage لضمان عمل الـ middleware بشكل صحيح
+          try {
+            const newStatus = isActive ? 'active' : (isExpired ? 'expired' : (result.user.subscription_status || 'inactive'));
+            const maxAge = 24 * 60 * 60;
+            document.cookie = 'subscription_status=' + encodeURIComponent(newStatus) + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+            
+            const storedUserStr = localStorage.getItem('user');
+            if (storedUserStr) {
+              const storedUser = JSON.parse(storedUserStr);
+              storedUser.subscription_status = newStatus;
+              localStorage.setItem('user', JSON.stringify(storedUser));
+            }
+          } catch (storageError) {
+            console.error('خطأ في تحديث حالة الاشتراك محلياً:', storageError);
+          }
+          
           console.log('تم تسجيل الدخول بنجاح:', result);
           toast.success('تم تسجيل الدخول بنجاح!');
           
-          // توجيه المستخدم إلى صفحة الاشتراكات إذا لم يكن لديه اشتراك نشط
-          if (result.user && result.user.subscription_status !== 'active') {
-            setTimeout(() => { window.location.href = '/subscription'; }, 200);
-          } else {
+          if (isActive) {
             setTimeout(() => { window.location.href = '/dashboard'; }, 200);
+          } else {
+            setTimeout(() => { window.location.href = '/subscription'; }, 200);
           }
         } else {
           setShowPackageModal(true);

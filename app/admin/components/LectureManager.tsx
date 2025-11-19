@@ -50,6 +50,27 @@ export default function LectureManager({ subject, onBack, onManageContent }: { s
     }
   }
 
+  const onSelectThumbnail = async (file?: File | null) => {
+    if (!file) return
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('folder', 'lecture-thumbnails')
+
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok || !json?.ok || !json.url) {
+        throw new Error(json?.error || 'upload failed')
+      }
+
+      setForm(prev => ({ ...prev, thumbnail_url: json.url }))
+      toast.success('تم رفع صورة المحاضرة')
+    } catch (e) {
+      console.error('Lecture thumbnail upload error:', e)
+      toast.error('فشل رفع صورة المحاضرة')
+    }
+  }
+
   const toggleActive = async (l: Lecture) => {
     try {
       const res = await fetch('/api/admin/lectures', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: l.id, is_active: !l.is_active }) })
@@ -130,6 +151,15 @@ export default function LectureManager({ subject, onBack, onManageContent }: { s
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'lecture_created', data: { title: form.title, subject: subject.title } })
+          })
+          await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'lecture_created',
+              title: `محاضرة جديدة في مادة ${subject.title}`,
+              message: `تم إضافة المحاضرة: ${form.title}`
+            })
           })
         } catch {}
       }
@@ -253,7 +283,18 @@ export default function LectureManager({ subject, onBack, onManageContent }: { s
                 </div>
                 <div>
                   <label className="text-white/70 text-sm mb-2 block">رابط الصورة</label>
-                  <input value={form.thumbnail_url} onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })} className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white" placeholder="https://..." />
+                  <input
+                    value={form.thumbnail_url}
+                    onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white mb-2"
+                    placeholder="https://... (اختياري، أو ارفع صورة)"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onSelectThumbnail(e.target.files?.[0] || null)}
+                    className="block w-full text-sm text-white/70 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gold file:text-black hover:file:bg-yellow-500/90"
+                  />
                 </div>
                 <div className="flex items-center gap-3 mt-2">
                   <input id="is_active" type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-5 h-5" />

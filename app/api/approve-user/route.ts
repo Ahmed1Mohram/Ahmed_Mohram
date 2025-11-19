@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/db-client'
+import { activateSubscription } from '@/lib/subscription-util'
 
 // دالة للتحقق من صحة تنسيق UUID
 function isValidUUID(uuid: string) {
@@ -54,11 +55,10 @@ export async function POST(req: NextRequest) {
       )
     }
     
-    // تحديث حالة الحساب والاشتراك
+    // تحديث حالة الحساب فقط: الموافقة لا تعطي اشتراكاً مدفوعاً تلقائياً
     const updateData = {
       status: 'approved',
-      subscription_status: 'active',
-      subscription_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 يوم من الآن
+      subscription_status: 'inactive',
       updated_at: new Date().toISOString()
     }
     
@@ -76,6 +76,17 @@ export async function POST(req: NextRequest) {
         { error: 'فشل تحديث حالة المستخدم', details: updateError.message },
         { status: 500 }
       )
+    }
+    
+    try {
+      const daysCount = 30
+      const packageName = (userData as any).package_name || 'باقة الشهر الواحد'
+      const activated = await activateSubscription(userId, daysCount, packageName)
+      if (!activated) {
+        console.error('فشل تفعيل الاشتراك عند الموافقة على المستخدم:', { userId })
+      }
+    } catch (activationError) {
+      console.error('خطأ أثناء تفعيل الاشتراك بعد الموافقة:', activationError)
     }
     
     // إرسال إشعار للمستخدم

@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS lecture_content (
   type TEXT CHECK (type IN ('video', 'pdf', 'audio', 'text', 'quiz')),
   title TEXT NOT NULL,
   content_url TEXT,
+  thumbnail_url TEXT,
   content_text TEXT,
   duration_minutes INT,
   order_index INT DEFAULT 0,
@@ -135,51 +136,6 @@ CREATE TABLE IF NOT EXISTS device_tracking (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- جدول الامتحانات
-CREATE TABLE IF NOT EXISTS exams (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  description TEXT,
-  duration INT NOT NULL,
-  total_marks INT NOT NULL,
-  passing_marks INT NOT NULL,
-  is_active BOOLEAN DEFAULT true,
-  created_by UUID REFERENCES users(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- جدول الأسئلة
-CREATE TABLE IF NOT EXISTS questions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  exam_id UUID REFERENCES exams(id) ON DELETE CASCADE,
-  question_text TEXT NOT NULL,
-  question_type TEXT CHECK (question_type IN ('mcq', 'true_false', 'essay')),
-  options JSONB,
-  correct_answer TEXT,
-  marks INT DEFAULT 1,
-  explanation TEXT,
-  order_index INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- جدول نتائج الامتحانات
-CREATE TABLE IF NOT EXISTS exam_results (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  exam_id UUID REFERENCES exams(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  score INT NOT NULL,
-  total_marks INT NOT NULL,
-  percentage DECIMAL(5,2),
-  passed BOOLEAN,
-  answers JSONB,
-  time_taken INT,
-  started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(exam_id, user_id)
-);
-
 -- جدول مستخدمي التليجرام
 CREATE TABLE IF NOT EXISTS telegram_users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -214,7 +170,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
-CREATE INDEX IF NOT EXISTS idx_exam_results_user ON exam_results(user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON activity_logs(user_id);
 
 -- إنشاء دالة لتحديث updated_at تلقائياً
@@ -256,7 +211,6 @@ ALTER TABLE views ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE exam_results ENABLE ROW LEVEL SECURITY;
 
 -- سياسات الأمان الأساسية
 DROP POLICY IF EXISTS "Users can view own profile" ON users;

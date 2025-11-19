@@ -18,51 +18,49 @@ export async function ensurePackagesTableExists(): Promise<boolean> {
     const tableExists = tablesData && tablesData.length > 0;
     console.log('Does packages table exist?', tableExists);
     
-    // إذا كان الجدول موجوداً، نعود بنجاح
-    if (tableExists) {
-      console.log('Packages table exists, no need to create it.');
-      return true;
-    }
-    
     // إذا لم يكن الجدول موجوداً، نقوم بإنشائه
-    console.log('Creating packages table...');
+    console.log('Creating packages table if needed...');
     let createError = null;
     
-    // محاولة إنشاء الجدول باستخدام rpc
-    try {
-      const { error } = await supabaseAdmin.rpc('exec', {
-        sql: `
-          CREATE TABLE IF NOT EXISTS packages (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            price INTEGER NOT NULL,
-            days_count INTEGER NOT NULL,
-            discount_from INTEGER,
-            color TEXT,
-            is_default BOOLEAN DEFAULT false,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-          );
-        `
-      });
-      createError = error;
-    } catch (rpcError) {
-      console.warn('RPC exec not available, trying alternative approach', rpcError);
+    if (!tableExists) {
+      console.log('Creating packages table...');
       
-      // محاولة أخرى للتحقق من وجود جدول الباقات
+      // محاولة إنشاء الجدول باستخدام rpc
       try {
-        const { data, error } = await supabaseAdmin
-          .from('packages')
-          .select('id')
-          .limit(1);
+        const { error } = await supabaseAdmin.rpc('exec', {
+          sql: `
+            CREATE TABLE IF NOT EXISTS packages (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              price INTEGER NOT NULL,
+              days_count INTEGER NOT NULL,
+              discount_from INTEGER,
+              color TEXT,
+              is_default BOOLEAN DEFAULT false,
+              created_at TIMESTAMPTZ DEFAULT NOW(),
+              updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+          `
+        });
+        createError = error;
+      } catch (rpcError) {
+        console.warn('RPC exec not available, trying alternative approach', rpcError);
         
-        if (!error) {
-          // إذا نجحت عملية الاستعلام، فهذا يعني أن الجدول موجود
-          console.log('Table exists based on successful query');
-          return true;
+        // محاولة أخرى للتحقق من وجود جدول الباقات
+        try {
+          const { data, error } = await supabaseAdmin
+            .from('packages')
+            .select('id')
+            .limit(1);
+          
+          if (!error) {
+            // إذا نجحت عملية الاستعلام، فهذا يعني أن الجدول موجود
+            console.log('Table exists based on successful query');
+            createError = null;
+          }
+        } catch (queryError) {
+          console.error('Alternative check failed too:', queryError);
         }
-      } catch (queryError) {
-        console.error('Alternative check failed too:', queryError);
       }
     }
     
@@ -93,13 +91,43 @@ export async function ensurePackagesTableExists(): Promise<boolean> {
       
       if (checkData !== null) {
         console.log('Table verification successful after creation/reload');
-        return true;
       }
     } catch (cacheError) {
       console.log('Schema verification failed, but continuing anyway', cacheError);
     }
-    
-    console.log('Packages table created successfully.');
+
+    // التأكد من وجود الأعمدة المطلوبة في جدول الباقات
+    try {
+      console.log('Ensuring required columns exist on packages table...');
+      const { error: alterError } = await supabaseAdmin.rpc('exec', {
+        sql: `
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS days_count INTEGER;
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS duration_days INTEGER;
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS discount_from INTEGER;
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS color TEXT;
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false;
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+          ALTER TABLE packages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        `
+      });
+
+      if (alterError) {
+        console.error('Error ensuring packages table columns:', alterError);
+      }
+    } catch (alterException) {
+      console.error('Exception while ensuring packages table columns:', alterException);
+    }
+
+    // محاولة إعادة تحميل المخطط بعد تعديل الأعمدة
+    try {
+      console.log('Reloading schema cache after ensuring columns...');
+      await supabaseAdmin.rpc('reload_schema_cache');
+      console.log('Schema cache reloaded successfully after altering columns');
+    } catch (reloadColumnsError) {
+      console.log('Could not reload schema cache after altering columns', reloadColumnsError);
+    }
+
+    console.log('Packages table verified with required columns.');
     return true;
   } catch (error) {
     console.error('Error ensuring packages table exists:', error);
@@ -143,7 +171,7 @@ export async function insertDefaultPackagesIfNeeded(): Promise<boolean> {
       { id: '2', name: 'باقة الشهرين', price: 400, days_count: 60, is_default: false, color: 'from-blue-500 to-indigo-700' },
       { id: '3', name: 'باقة 3 شهور', price: 500, days_count: 90, is_default: false, color: 'from-purple-500 to-purple-800' },
       { id: '4', name: 'باقة 5 شهور', price: 900, days_count: 150, is_default: false, color: 'from-red-500 to-rose-800' },
-      { id: '5', name: 'العرض المميز', price: 150, days_count: 30, discount_from: 200, is_default: false, color: 'from-green-500 to-emerald-700' }
+      { id: '5', name: 'العرض المميز', price: 100, days_count: 30, discount_from: 200, is_default: false, color: 'from-green-500 to-emerald-700' }
     ];
     
     console.log('Inserting default packages...');

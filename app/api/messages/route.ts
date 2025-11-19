@@ -55,5 +55,24 @@ export async function POST(req: NextRequest) {
     .select('*')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ message: data?.[0] })
+  const message = data?.[0]
+
+  // إنشاء إشعار في زر الإشعارات عند إرسال رسالة من الأدمن للطالب
+  if (message && sender === 'admin') {
+    try {
+      await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'admin_message',
+          title: 'رسالة جديدة من أحمد محرم',
+          message: text,
+          is_read: false,
+        })
+    } catch {
+      // تجاهل خطأ الإشعارات حتى لا يكسر إرسال الرسالة الأساسية
+    }
+  }
+
+  return NextResponse.json({ message })
 }

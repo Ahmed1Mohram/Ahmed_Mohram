@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 
 // Admin client with service role key for bypassing RLS
 export const supabaseAdmin = createClient(
-  'https://fsvwusrpuiczznzgnyvd.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdnd1c3JwdWljenpuemdueXZkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mjg4NjYyMSwiZXhwIjoyMDc4NDYyNjIxfQ.nNVpkQodQkZ5RULi1R7yLHizr2ig58FbCNV6VBrxwc4',
+  'https://tkvzxsuozjbmcmrxqpkt.supabase.co',
+  process.env.SUPABASE_SERVICE_KEY || '',
   {
     auth: {
       autoRefreshToken: false,

@@ -70,6 +70,18 @@ export async function POST(req: NextRequest) {
     const userAgent = req.headers.get('user-agent') || '';
     const deviceInfo = parseUserAgent(userAgent);
     console.log('Device info:', deviceInfo);
+
+    // التأكد من وجود عمود package_name في جدول المستخدمين (للداتا القديمة)
+    try {
+      await supabase.rpc('exec', {
+        sql: `
+          ALTER TABLE public.users
+          ADD COLUMN IF NOT EXISTS package_name TEXT;
+        `
+      });
+    } catch (e) {
+      console.log('Non-critical: failed to ensure package_name column on users table', e);
+    }
     
     // حفظ اختيار الباقة في جدول المستخدمين
     // فقط تحديث الحقول المتوفرة في الجدول

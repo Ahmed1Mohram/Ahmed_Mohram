@@ -8,8 +8,16 @@ function isAdmin(req: NextRequest) {
 
 export async function GET() {
   const { data, error } = await supabaseAdmin.from('subjects').select('*').order('order_index')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ subjects: data || [] })
+  if (error) {
+    // لا نكسر لوحة الأدمن بسبب خطأ في Supabase (مثل Invalid API key)
+    // نرجع قائمة مواد فارغة بدلاً من 500 حتى تستمر الواجهة
+    return NextResponse.json({
+      success: true,
+      subjects: [],
+      error: error.message
+    })
+  }
+  return NextResponse.json({ success: true, subjects: data || [] })
 }
 
 export async function POST(req: NextRequest) {

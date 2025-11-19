@@ -13,6 +13,7 @@ interface ContentItem {
   title: string
   description?: string
   content_url?: string
+  thumbnail_url?: string
   content_text?: string
   duration_minutes?: number
   order_index: number
@@ -30,6 +31,7 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
     title: '',
     description: '',
     content_url: '',
+    thumbnail_url: '',
     content_text: '',
     duration_minutes: 0,
     is_downloadable: false,
@@ -54,30 +56,107 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
   }
 
   const acceptFor = (type: string) => {
-    if (type === 'video') return 'video/*'
-    if (type === 'audio') return 'audio/*'
-    if (type === 'pdf') return 'application/pdf'
-    return '*/*'
+    // دعم صيغ أكثر من الملفات بحسب النوع
+    switch (type) {
+      case 'video':
+        return 'video/*,.mkv,.avi,.mov,.mp4,.wmv,.flv,.webm,.m4v'
+      case 'audio':
+        return 'audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.wma,.opus,.aiff'
+      case 'pdf':
+        // دعم ملفات PDF و PowerPoint و Word و Excel
+        return '.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.odt,.odp,.ods,.rtf'
+      case 'doc':
+        // نوع جديد للمستندات بشكل عام
+        return '.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.odt,.odp,.ods,.rtf'
+      default:
+        return '*/*'
+    }
   }
 
   const [uploading, setUploading] = useState(false)
+  const [uploadBytes, setUploadBytes] = useState(0)
+  const [uploadTotal, setUploadTotal] = useState(0)
+  const [uploadStartTime, setUploadStartTime] = useState<number | null>(null)
+
   const onSelectFile = async (file?: File | null) => {
     if (!file) return
     try {
       setUploading(true)
+      setUploadBytes(0)
+      setUploadTotal(file.size)
+      setUploadStartTime(Date.now())
+
       const fd = new FormData()
       fd.append('file', file)
       fd.append('folder', form.type)
       fd.append('lectureId', String(lecture.id))
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (!res.ok || !json?.ok) throw new Error(json?.error || 'upload failed')
-      setForm(prev => ({ ...prev, content_url: json.url }))
-      toast.success('تم رفع الملف')
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', '/api/upload')
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setUploadTotal(event.total)
+            setUploadBytes(event.loaded)
+          }
+        }
+
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState === XMLHttpRequest.DONE) {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const json = JSON.parse(xhr.responseText || '{}')
+                if (!json?.ok || !json.url) {
+                  reject(new Error(json?.error || 'upload failed'))
+                  return
+                }
+                setForm(prev => ({ ...prev, content_url: json.url }))
+                toast.success('تم رفع الملف')
+                resolve()
+              } catch (err) {
+                reject(err)
+              }
+            } else {
+              reject(new Error('upload failed'))
+            }
+          }
+        }
+
+        xhr.onerror = () => {
+          reject(new Error('upload failed'))
+        }
+
+        xhr.send(fd)
+      })
     } catch (e) {
+      console.error('Upload error:', e)
       toast.error('فشل رفع الملف')
     } finally {
       setUploading(false)
+      setUploadStartTime(null)
+    }
+  }
+
+  const onSelectThumbnail = async (file?: File | null) => {
+    if (!file) return
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('folder', 'content-thumbnails')
+      fd.append('lectureId', String(lecture.id))
+
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok || !json?.ok || !json.url) {
+        throw new Error(json?.error || 'upload failed')
+      }
+
+      setForm(prev => ({ ...prev, thumbnail_url: json.url }))
+      toast.success('تم رفع صورة المحتوى')
+    } catch (e) {
+      console.error('Thumbnail upload error:', e)
+      toast.error('فشل رفع صورة المحتوى')
     }
   }
 
@@ -88,6 +167,7 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
       title: '',
       description: '',
       content_url: '',
+      thumbnail_url: '',
       content_text: '',
       duration_minutes: 0,
       is_downloadable: false,
@@ -103,6 +183,7 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
       title: it.title || '',
       description: it.description || '',
       content_url: it.content_url || '',
+      thumbnail_url: it.thumbnail_url || '',
       content_text: it.content_text || '',
       duration_minutes: it.duration_minutes || 0,
       is_downloadable: !!it.is_downloadable,
@@ -123,6 +204,7 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
         title: form.title,
         description: form.description || null,
         content_url: form.type === 'text' ? null : (form.content_url || null),
+        thumbnail_url: form.thumbnail_url || null,
         content_text: form.type === 'text' ? (form.content_text || '') : null,
         duration_minutes: form.duration_minutes || null,
         is_downloadable: form.is_downloadable,
@@ -150,6 +232,15 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'content_created', data: { title: form.title, type: form.type, lecture: lecture.title } })
+          })
+          await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'content_created',
+              title: `محتوى جديد في ${lecture.title}`,
+              message: `تم إضافة ${form.type === 'video' ? 'فيديو' : form.type === 'audio' ? 'ريكورد' : form.type === 'pdf' ? 'ملف PDF' : 'شرح'} بعنوان: ${form.title}`
+            })
           })
         } catch {}
       }
@@ -203,6 +294,7 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
       case 'video': return <Video className="w-5 h-5" />
       case 'audio': return <Headphones className="w-5 h-5" />
       case 'pdf': return <FileText className="w-5 h-5" />
+      case 'doc': return <FileText className="w-5 h-5" />
       default: return <BookOpen className="w-5 h-5" />
     }
   }
@@ -283,8 +375,9 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
                   <label className="text-white/70 text-sm mb-2 block">النوع</label>
                   <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as any })} className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
                     <option value="video">فيديو</option>
-                    <option value="audio">ريكورد</option>
+                    <option value="audio">ملف صوتي</option>
                     <option value="pdf">PDF</option>
+                    <option value="doc">مستندات (PowerPoint/Word/Excel)</option>
                     <option value="text">شرح الدكتور</option>
                   </select>
                 </div>
@@ -297,8 +390,49 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
                     <label className="text-white/70 text-sm mb-2 block">الرابط</label>
                     <input value={form.content_url} onChange={(e) => setForm({ ...form, content_url: e.target.value })} className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white" placeholder="https://..." />
                     <div className="mt-2 flex items-center gap-2">
-                      <input type="file" accept={acceptFor(form.type)} onChange={(e) => onSelectFile(e.target.files?.[0] || null)} disabled={uploading} className="block w-full text-sm text-white/70 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gold file:text-black hover:file:bg-yellow-500/90" />
-                      {uploading && <span className="text-xs text-white/60">جاري الرفع...</span>}
+                      <input
+                        type="file"
+                        accept={acceptFor(form.type)}
+                        onChange={(e) => onSelectFile(e.target.files?.[0] || null)}
+                        disabled={uploading}
+                        className="block w-full text-sm text-white/70 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gold file:text-black hover:file:bg-yellow-500/90"
+                      />
+                      {uploading && (
+                        (() => {
+                          const total = uploadTotal || 0
+                          const loaded = uploadBytes
+                          const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0
+                          const loadedMB = total > 0 ? loaded / (1024 * 1024) : 0
+                          const totalMB = total > 0 ? total / (1024 * 1024) : 0
+                          let remainingSeconds = 0
+                          if (uploadStartTime && loaded > 0 && total > 0) {
+                            const elapsed = (Date.now() - uploadStartTime) / 1000
+                            const speed = loaded / elapsed
+                            if (speed > 0) {
+                              remainingSeconds = Math.max(0, Math.round((total - loaded) / speed))
+                            }
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-1 min-w-[180px]">
+                              <div className="flex justify-between text-[10px] text-white/70">
+                                <span>جاري الرفع...</span>
+                                <span>{percent}%</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-gold to-yellow-500"
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between text-[10px] text-white/60">
+                                <span>{loadedMB.toFixed(1)} / {totalMB.toFixed(1)} ميجا</span>
+                                {remainingSeconds > 0 && <span>متبقي ~ {remainingSeconds}s</span>}
+                              </div>
+                            </div>
+                          )
+                        })()
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -307,6 +441,21 @@ export default function ContentManager({ lecture, onBack }: { lecture: Lecture; 
                     <textarea rows={4} value={form.content_text} onChange={(e) => setForm({ ...form, content_text: e.target.value })} className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white" placeholder="اكتب الشرح هنا" />
                   </div>
                 )}
+                <div className="md:col-span-2">
+                  <label className="text-white/70 text-sm mb-2 block">صورة المحتوى (اختياري)</label>
+                  <input
+                    value={form.thumbnail_url}
+                    onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white mb-2"
+                    placeholder="https://... (أو ارفع صورة)"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onSelectThumbnail(e.target.files?.[0] || null)}
+                    className="block w-full text-sm text-white/70 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gold file:text-black hover:file:bg-yellow-500/90"
+                  />
+                </div>
                 <div>
                   <label className="text-white/70 text-sm mb-2 block">المدة (دقائق)</label>
                   <input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: parseInt(e.target.value || '0') })} className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white" />

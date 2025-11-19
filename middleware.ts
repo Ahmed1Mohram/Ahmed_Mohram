@@ -5,6 +5,18 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next()
   
+  // حماية مسارات /api/admin بالاعتماد على كوكي isAdmin فقط
+  if (request.nextUrl.pathname.startsWith('/api/admin')) {
+    const adminCookie = request.cookies.get('isAdmin');
+    const isAdmin = adminCookie?.value === 'true';
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    }
+
+    return res
+  }
+
   // تجاوز التحقق لـ API routes وملفات الوسائط
   if (request.nextUrl.pathname.startsWith('/api/') || 
       request.nextUrl.pathname.startsWith('/audio/') ||
@@ -63,7 +75,7 @@ export async function middleware(request: NextRequest) {
   }
   
   // الصفحات العامة المسموح بها
-  const publicPaths = ['/', '/login', '/register', '/subscription', '/waiting-approval']
+  const publicPaths = ['/', '/login', '/register', '/waiting-approval']
   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname === path)
 
   // إذا لم يكن هناك admin cookies ولا يحاول الوصول لصفحة عامة أو admin
@@ -119,12 +131,17 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    // التحقق من حالة الاشتراك للوصول للمحتوى المدفوع
-    const protectedPaths = ['/lectures', '/content', '/dashboard']
-    const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
+    // التحقق من حالة الاشتراك: أي صفحة غير عامة وغير صفحة الباقات/الانتظار تحتاج اشتراك فعّال
+    const isSubscriptionPage = request.nextUrl.pathname.startsWith('/subscription')
+    const isWaitingPage = request.nextUrl.pathname.startsWith('/waiting-approval')
+    const isAllowedWithoutSub = isPublicPath || isSubscriptionPage || isWaitingPage
+    const isProtectedPath = !isAllowedWithoutSub
+
     if (isProtectedPath && subStatusCookie !== 'active') {
-      console.log('Cookie subscription check failed - redirecting to subscription');
-      return NextResponse.redirect(new URL('/subscription', request.url))
+      console.log('Cookie subscription check failed - redirecting to subscription with warning');
+      const url = new URL('/subscription', request.url)
+      url.searchParams.set('warn', '1')
+      return NextResponse.redirect(url)
     }
   }
 
@@ -159,13 +176,17 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard', request.url))
       }
 
-      // التحقق من حالة الاشتراك للوصول للمحتوى المدفوع
-      const protectedPaths = ['/lectures', '/content', '/dashboard']
-      const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
-      
+      // التحقق من حالة الاشتراك: أي صفحة غير عامة وغير صفحة الباقات/الانتظار تحتاج اشتراك فعّال
+      const isSubscriptionPage = request.nextUrl.pathname.startsWith('/subscription')
+      const isWaitingPage = request.nextUrl.pathname.startsWith('/waiting-approval')
+      const isAllowedWithoutSub = isPublicPath || isSubscriptionPage || isWaitingPage
+      const isProtectedPath = !isAllowedWithoutSub
+
       if (isProtectedPath && userData?.subscription_status !== 'active') {
-        console.log('Subscription check failed - redirecting to subscription');
-        return NextResponse.redirect(new URL('/subscription', request.url))
+        console.log('Subscription check failed - redirecting to subscription with warning');
+        const url = new URL('/subscription', request.url)
+        url.searchParams.set('warn', '1')
+        return NextResponse.redirect(url)
       }
     } catch (dbError) {
       console.error('Error checking user status:', dbError);

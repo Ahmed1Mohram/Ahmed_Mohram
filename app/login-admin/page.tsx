@@ -46,6 +46,8 @@ export default function AdminLoginPage() {
         localStorage.setItem('user', JSON.stringify(result.user))
         localStorage.setItem('isAdmin', 'true')
         document.cookie = 'isAdmin=true; path=/; max-age=86400' // صالح لمدة 24 ساعة
+        // ضبط كوكي loggedIn ليستطيع Middleware تمرير /api/admin
+        document.cookie = 'loggedIn=true; path=/; max-age=86400; SameSite=Lax'
         
         toast.success('تم تسجيل الدخول بنجاح!')
         

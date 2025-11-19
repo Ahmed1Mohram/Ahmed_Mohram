@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [showSuccessCard, setShowSuccessCard] = useState(false)
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -142,9 +143,7 @@ export default function RegisterPage() {
       localStorage.setItem('showWelcome', 'true');
       
       // التوجيه لصفحة الاشتراكات لعرض كروت الباقات مباشرة
-      setTimeout(() => {
-        router.push('/subscription');
-      }, 1000);
+      setShowSuccessCard(true);
     } catch (error: any) {
       console.error('خطأ في التسجيل:', error);
       let errorMessage = 'حدث خطأ في التسجيل. تأكد من اتصالك بالإنترنت.';
@@ -439,6 +438,43 @@ export default function RegisterPage() {
               </Link>
             </p>
           </motion.div>
+
+          <AnimatePresence>
+            {showSuccessCard && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="absolute inset-0 bg-black/80 flex items-center justify-center z-20"
+              >
+                <motion.div
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 20, opacity: 0 }}
+                  className="luxury-card rounded-3xl p-8 max-w-md w-full text-center border border-gold/40 bg-gradient-to-br from-gold/20 via-black to-black"
+                >
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full border-2 border-gold flex items-center justify-center bg-black/60">
+                    <Crown className="w-10 h-10 text-gold" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gold mb-3">
+                    تم إنشاء حسابك بنجاح
+                  </h2>
+                  <p className="text-white/80 mb-6">
+                    تم إنشاء الحساب ومنتظرين أحمد محرم يقبلك
+                    <br />
+                    سنرسل لك إشعاراً بمجرد الموافقة
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/waiting-approval')}
+                    className="w-full bg-gradient-to-r from-gold to-yellow-500 text-black py-3 rounded-xl font-bold hover:shadow-lg hover:shadow-gold/30 transition-all"
+                  >
+                    حسناً
+                  </button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </div>

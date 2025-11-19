@@ -2,9 +2,22 @@ import { createClient } from '@supabase/supabase-js'
 
 // بيانات الاتصال بقاعدة البيانات
 // استخدام قيم من ملف .env.local أو القيم الافتراضية إذا لم تكن موجودة
-export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-export const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || ''
+export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL|| ''
+export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY|| ''
+export const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY|| ''
+
+// Debug: log Supabase config on the server to verify env vars at runtime
+if (typeof window === 'undefined') {
+  try {
+    console.log('[db-client] Supabase config (server):', {
+      url: supabaseUrl,
+      anonPrefix: supabaseAnonKey ? supabaseAnonKey.substring(0, 8) : 'EMPTY',
+      servicePrefix: supabaseServiceKey ? supabaseServiceKey.substring(0, 8) : 'EMPTY'
+    })
+  } catch {
+    // avoid breaking if console or substring fails for any reason
+  }
+}
 
 // عميل Supabase العام للعمليات العامة - استخدام مفتاح تخزين مختلف
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -16,13 +29,17 @@ export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // عميل Supabase للإدارة مع صلاحيات كاملة (مفتاح الخدمة)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-    storageKey: 'education-platform-admin-key' // مفتاح تخزين خاص للإدارة
-  }
-})
+const isServer = typeof window === 'undefined'
+
+export const supabaseAdmin = isServer
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        storageKey: 'education-platform-admin-key' // مفتاح تخزين خاص للإدارة
+      }
+    })
+  : (null as any)
 
 /**
  * دالة مساعدة للحصول على عميل Supabase للمستخدم الحالي

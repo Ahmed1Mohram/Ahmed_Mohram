@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db-client';
 
+const escapeLiteral = (value: string) => value.replace(/'/g, "''");
+
 export async function POST(req: NextRequest) {
   try {
     console.log('بدء معالجة طلب الدفع المبسط...');
@@ -102,34 +104,72 @@ export async function POST(req: NextRequest) {
 
     // حفظ بيانات الطلب في جدول بديل بسيط
     try {
+      // التأكد من وجود جدول subscription_requests والأعمدة اللازمة في users
+      try {
+        await supabaseAdmin.rpc('exec', {
+          sql: `
+            CREATE TABLE IF NOT EXISTS public.subscription_requests (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID REFERENCES public.users(id),
+              package_name TEXT NOT NULL,
+              price INTEGER NOT NULL,
+              days_count INTEGER,
+              payment_method TEXT,
+              receipt_url TEXT,
+              status TEXT DEFAULT 'pending',
+              details JSONB,
+              created_at TIMESTAMPTZ DEFAULT NOW(),
+              updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            ALTER TABLE public.users
+              ADD COLUMN IF NOT EXISTS package_name TEXT,
+              ADD COLUMN IF NOT EXISTS amount INTEGER,
+              ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+          `
+        });
+      } catch (ensureError) {
+        console.log('Non-critical: failed to ensure subscription_requests/users columns schema', ensureError);
+      }
       // تحويل المدة إلى أيام
       const daysCount = parseInt((duration || '30').replace(/\D/g, '')) || 30;
-      
-      // إضافة سجل في جدول subscription_requests بدلاً من محاولة إنشاء جداول معقدة
-      const { data, error } = await supabaseAdmin
-        .from('subscription_requests')
-        .insert({
-          user_id: userId,
-          package_name: packageName,
-          price: parseInt(price),
-          days_count: daysCount,
-          payment_method: paymentMethod || 'vodafone_cash',
-          receipt_url: receiptUrl,
-          status: 'pending',
-          details: JSON.stringify({
-            packageName,
-            price,
-            duration,
-            paymentMethod,
-            timestamp: new Date().toISOString()
-          }),
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-        
-      if (error) {
-        console.error('Error saving subscription request:', error);
+
+      // إعداد تفاصيل الطلب كـ JSON
+      const requestDetails = {
+        packageName,
+        price,
+        duration,
+        paymentMethod,
+        timestamp: new Date().toISOString()
+      };
+      const detailsJson = JSON.stringify(requestDetails);
+
+      // إعداد قيم آمنة للسلاسل النصية في SQL
+      const safePackageName = escapeLiteral(packageName);
+      const safePaymentMethod = escapeLiteral(paymentMethod || 'vodafone_cash');
+      const safeDetails = escapeLiteral(detailsJson);
+      const safeReceiptUrl = receiptUrl ? escapeLiteral(receiptUrl as string) : null;
+
+      const insertSql = `
+        INSERT INTO public.subscription_requests
+          (user_id, package_name, price, days_count, payment_method, receipt_url, status, details, created_at, updated_at)
+        VALUES (
+          '${userId}'::uuid,
+          '${safePackageName}',
+          ${parseInt(price)},
+          ${daysCount},
+          '${safePaymentMethod}',
+          ${safeReceiptUrl ? `'${safeReceiptUrl}'` : 'NULL'},
+          'pending',
+          '${safeDetails}'::jsonb,
+          NOW(),
+          NOW()
+        );
+      `;
+
+      const { error: insertError } = await supabaseAdmin.rpc('exec', { sql: insertSql });
+      if (insertError) {
+        console.error('Error saving subscription request via exec:', insertError);
         throw new Error('فشل حفظ طلب الاشتراك');
       }
       
@@ -164,8 +204,7 @@ export async function POST(req: NextRequest) {
       
       return NextResponse.json({
         success: true,
-        message: 'تم إرسال طلب الاشتراك بنجاح',
-        request: data
+        message: 'تم إرسال طلب الاشتراك بنجاح'
       });
       
     } catch (dbError: any) {

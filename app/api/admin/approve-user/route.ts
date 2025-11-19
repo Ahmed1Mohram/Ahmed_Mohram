@@ -9,8 +9,8 @@ function isValidUUID(uuid: string) {
 
 // طباعة مفاتيح API للتأكد من قراءتها بشكل صحيح (لأغراض التصحيح فقط)
 console.log('SUPABASE URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-// طباعة أول 10 أحرف من المفتاح فقط للأمان
-console.log('SERVICE_ROLE_KEY (first 10 chars):', process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 10));
+// طباعة أول 10 أحرف من مفتاح الخدمة فقط للأمان
+console.log('SERVICE_KEY (first 10 chars):', process.env.SUPABASE_SERVICE_KEY?.substring(0, 10));
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
     let updateData: any = {}
 
     if (action === 'approve') {
+      // الموافقة على الحساب فقط: يبقى الاشتراك غير مفعل حتى يتم الدفع
       updateData = {
         status: 'approved',
-        subscription_status: 'active',
-        subscription_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+        subscription_status: 'inactive',
         updated_at: new Date().toISOString()
       }
     } else if (action === 'reject') {
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log('Update data:', updateData)
-    console.log('URL being used:', 'https://fsvwusrpuiczznzgnyvd.supabase.co')
+    console.log('Using Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
 
     const { data, error } = await supabaseAdmin
       .from('users')

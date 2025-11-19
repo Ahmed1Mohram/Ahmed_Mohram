@@ -4,6 +4,7 @@ import './globals.css'
 import { Providers } from '@/components/providers'
 import { Toaster } from 'react-hot-toast'
 import { Facebook, Instagram, MessageCircle } from 'lucide-react'
+import { ClientOnly } from '@/components/client-only'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -52,43 +53,45 @@ export default function RootLayout({
           
           {children}
           
-          <footer className="w-full border-t border-gold/20 bg-black/60 mt-12">
-            <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-3">
-              <div className="text-sm text-white/70">©2026 جميع الحقوق محفوظة. ل احمد محرم</div>
-              <div className="flex items-center gap-4 text-sm">
-                <a
-                  href="https://wa.me/201005209667"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="WhatsApp"
-                  className="text-gold hover:text-white transition-colors"
-                  title="WhatsApp"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://www.facebook.com/ahmd.mhrm.456292"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Facebook"
-                  className="text-gold hover:text-white transition-colors"
-                  title="Facebook"
-                >
-                  <Facebook className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://www.instagram.com/ahmed_mohram6?igsh=cjRjMHNpZXR4aDJz"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Instagram"
-                  className="text-gold hover:text-white transition-colors"
-                  title="Instagram"
-                >
-                  <Instagram className="w-5 h-5" />
-                </a>
+          <ClientOnly>
+            <footer className="w-full border-t border-gold/20 bg-black/60 mt-12">
+              <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="text-sm text-white/70">©2026 جميع الحقوق محفوظة. ل احمد محرم</div>
+                <div className="flex items-center gap-4 text-sm">
+                  <a
+                    href="https://wa.me/201005209667"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="WhatsApp"
+                    className="text-gold hover:text-white transition-colors"
+                    title="WhatsApp"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://www.facebook.com/ahmd.mhrm.456292"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Facebook"
+                    className="text-gold hover:text-white transition-colors"
+                    title="Facebook"
+                  >
+                    <Facebook className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://www.instagram.com/ahmed_mohram6?igsh=cjRjMHNpZXR4aDJz"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Instagram"
+                    className="text-gold hover:text-white transition-colors"
+                    title="Instagram"
+                  >
+                    <Instagram className="w-5 h-5" />
+                  </a>
+                </div>
               </div>
-            </div>
-          </footer>
+            </footer>
+          </ClientOnly>
           
           <Toaster
             position="top-center"
