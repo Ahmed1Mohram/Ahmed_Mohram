@@ -102,7 +102,9 @@ const AudioButton = () => {
     let hasPlayed = false;
     
     const playWelcomeSound = () => {
-      if (!hasPlayed && canAutoPlay) {
+      if (!hasPlayed) {
+        hasPlayed = true;
+
         // محاولة تشغيل الملف الصوتي أولاً
         toggle();
         
@@ -113,7 +115,6 @@ const AudioButton = () => {
           }
         }, 1000);
         
-        hasPlayed = true;
         console.log('تم تشغيل صوت الترحيب عند التفاعل الأول');
       }
     };

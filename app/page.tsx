@@ -771,6 +771,9 @@ export default function ModernHomePage() {
 
   useEffect(() => {
     if (!showSplash) {
+      if (typeof window !== 'undefined') {
+        window.scrollTo(0, 0)
+      }
       const timer = setTimeout(() => {
         setAudioEnded(true)
         console.log('تم تفعيل زر "ابدأ التميز"')

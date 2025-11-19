@@ -23,6 +23,11 @@ export const metadata: Metadata = {
     siteName: 'أحمد محرم ',
     locale: 'ar_EG',
     type: 'website',
+    images: ['/images/am-hero-banner.png'],
+  },
+  icons: {
+    icon: '/images/am-gold-logo.png',
+    apple: '/images/am-gold-logo.png',
   },
 }
 
@@ -38,8 +43,8 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className="dark">
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="apple-touch-icon" href="/images/icon-192.png" />
+        <link rel="icon" href="/images/am-gold-logo.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/images/am-gold-logo.png" />
       </head>
       <body className={`${inter.className} bg-gray-900 text-white`}>
         <Providers>
