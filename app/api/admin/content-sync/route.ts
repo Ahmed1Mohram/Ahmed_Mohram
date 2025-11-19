@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/db-client'
 
+// إجبار هذا الـ API ليكون ديناميكياً دائماً في Next.js وتفادي أخطاء DYNAMIC_SERVER_USAGE
+export const dynamic = 'force-dynamic'
+
 /**
  * واجهة API مخصصة لمزامنة محتوى المحاضرات وحل مشاكل عدم ظهورها للمستخدمين
  * تقوم بعملية فحص شاملة وإصلاح المشاكل تلقائياً
