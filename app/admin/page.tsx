@@ -30,6 +30,7 @@ interface User {
   email: string
   phone_number: string
   password_hash?: string
+  password_plain?: string
   role?: 'admin' | 'teacher' | 'student'
   status: 'pending' | 'approved' | 'rejected' | 'banned'
   subscription_status: 'active' | 'inactive' | 'expired'
@@ -76,9 +77,37 @@ const handleUnbanDevice = async (userId: string) => {
   }
 }
 
-// مؤقتًا: منع خطأ مرجعي لزر الحذف حتى يتم ربط API الحذف بشكل آمن
+// حذف المستخدم نهائيًا من لوحة الأدمن عبر API مخصصة
 const handleDeleteUser = async (userId: string, userName: string) => {
-  toast.error('حذف المستخدم غير متاح حاليًا')
+  try {
+    const firstConfirm = window.confirm(`هل أنت متأكد من حذف حساب "${userName}" نهائيًا؟ لا يمكن التراجع عن هذه الخطوة.`)
+    if (!firstConfirm) return
+
+    const secondConfirm = window.prompt('للتأكيد اكتب كلمة "حذف" أو اكتب اسم الطالب بالكامل:')
+    if (!secondConfirm || (secondConfirm !== 'حذف' && secondConfirm !== userName)) {
+      toast.error('تم إلغاء عملية الحذف')
+      return
+    }
+
+    const res = await fetch(`/api/delete-user?userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE'
+    })
+
+    const json = await res.json().catch(() => ({} as any))
+
+    if (res.ok && (json?.success || !json?.error)) {
+      toast.success('تم حذف المستخدم بنجاح')
+      // يفضّل تحديث الصفحة لضمان تحديث القائمة
+      if (typeof window !== 'undefined') {
+        window.location.reload()
+      }
+    } else {
+      toast.error(json?.error || 'فشل حذف المستخدم')
+    }
+  } catch (error) {
+    console.error('Error deleting user:', error)
+    toast.error('حدث خطأ أثناء حذف المستخدم')
+  }
 }
 
 interface PaymentRequest {
@@ -910,7 +939,7 @@ const handleUnbanUser = async (userId: string) => {
                             </button>
                             {user.role !== 'admin' && (
                               <button
-                                onClick={() => handleDeleteUser(user.id, user.full_name)}
+                                onClick={() => handleDeleteUser(user.id, user.full_name, fetchData)}
                                 className="p-2 bg-red-600/20 text-red-500 rounded-lg hover:bg-red-600/40 transition-all border border-red-500/30"
                                 title="حذف نهائي ⚠️"
                               >

@@ -1,26 +1,24 @@
-import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { supabaseAdmin } from '@/lib/db-client'
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    console.log('طلب حذف مستخدم...');
-    
-    // التحقق من وجود رمز المصادقة
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('خطأ: رمز المصادقة غير موجود');
-      return NextResponse.json({ 
-        error: 'المصادقة مطلوبة', 
-        details: 'يجب توفير رمز المصادقة في رأس الطلب' 
-      }, { status: 401 });
+    console.log('طلب حذف مستخدم...')
+
+    // التحقق من أن الطلب صادر من أدمن عبر كوكي isAdmin
+    const cookieStore = cookies()
+    const adminCookie = cookieStore.get('isAdmin')
+    const isAdmin = adminCookie?.value === 'true'
+
+    if (!isAdmin) {
+      console.log('خطأ: محاولة حذف بدون صلاحيات أدمن')
+      return NextResponse.json(
+        { error: 'مسموح فقط للمسؤولين' },
+        { status: 403 }
+      )
     }
-    
-    // استخراج الرمز
-    const token = authHeader.split(' ')[1];
-    console.log('تم استلام رمز المصادقة');
-    
-    const supabase = createRouteHandlerClient({ cookies })
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
@@ -31,78 +29,44 @@ export async function DELETE(request: Request) {
       )
     }
 
-    console.log('التحقق من جلسة المستخدم...');
-    
-    // التحقق من أن المستخدم الحالي هو أدمن
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      console.log('خطأ: لا يوجد جلسة تسجيل دخول');
-      return NextResponse.json(
-        { error: 'يجب تسجيل الدخول' },
-        { status: 401 }
-      )
-    }
-    
-    // التحقق من أن المستخدم مسؤول
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('is_admin, email')
-      .eq('id', session.user.id)
-      .single();
-      
-    console.log('بيانات المستخدم الحالي:', userData);
+    console.log('جاري حذف المستخدم وجميع بياناته المرتبطة:', userId)
 
-    // التحقق من أن المستخدم مسؤول - إما من خلال حقل is_admin أو بريده ينتهي بـ @admin.com
-    const isAdmin = userData?.is_admin === true || session.user.email?.endsWith('@admin.com');
-    
-    if (!isAdmin) {
-      console.log('خطأ: المستخدم ليس مسؤولاً');
-      return NextResponse.json(
-        { error: 'مسموح فقط للمسؤولين' },
-        { status: 403 }
-      )
-    }
-    
-    console.log('تم التحقق من صلاحيات المسؤول.');
+    // حذف طلبات الدفع الخاصة بالمستخدم
+    await supabaseAdmin
+      .from('payment_requests')
+      .delete()
+      .eq('user_id', userId)
+
+    // حذف الاشتراكات الخاصة بالمستخدم
+    await supabaseAdmin
+      .from('subscriptions')
+      .delete()
+      .eq('user_id', userId)
 
     // حذف بيانات المستخدم من جدول users
-    const { error: deleteUserError } = await supabase
+    const { error: deleteUserError } = await supabaseAdmin
       .from('users')
       .delete()
       .eq('id', userId)
 
     if (deleteUserError) {
-      console.error('خطأ في حذف المستخدم:', deleteUserError)
+      console.error('خطأ في حذف المستخدم من جدول users:', deleteUserError)
       return NextResponse.json(
         { error: 'فشل حذف المستخدم', details: deleteUserError.message },
         { status: 500 }
       )
     }
 
-    // حذف طلبات الدفع الخاصة بالمستخدم
-    await supabase
-      .from('payment_requests')
-      .delete()
-      .eq('user_id', userId)
-
-    // حذف الاشتراكات الخاصة بالمستخدم
-    await supabase
-      .from('subscriptions')
-      .delete()
-      .eq('user_id', userId)
-
-    // محاولة حذف المستخدم من Auth (اختياري)
+    // محاولة حذف المستخدم من Auth (للسماح بالتسجيل من جديد بنفس البيانات)
     try {
-      // استخدام مفتاح الخدمة لحذف المستخدم
-      const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId)
+      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
       if (authDeleteError) {
-        throw authDeleteError
+        console.log('تحذير: لم نتمكن من حذف المستخدم من Auth:', authDeleteError)
       } else {
         console.log('تم حذف المستخدم من Auth بنجاح')
       }
     } catch (authError) {
-      console.log('تحذير: لم نتمكن من حذف المستخدم من Auth:', authError)
+      console.log('تحذير: استثناء أثناء حذف المستخدم من Auth:', authError)
       // نكمل حتى لو فشل حذف Auth
     }
 

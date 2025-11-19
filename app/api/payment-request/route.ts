@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
     
     const formData = await req.formData();
     const packageName = formData.get('packageName') as string;
+    const packageId = formData.get('packageId') as string | null;
     const price = formData.get('price') as string;
     const duration = formData.get('duration') as string;
     const paymentMethod = formData.get('paymentMethod') as string;
@@ -16,7 +17,8 @@ export async function POST(req: NextRequest) {
     const userId = formData.get('userId') as string;
     
     console.log('البيانات المستلمة:', { 
-      packageName, 
+      packageName,
+      packageId,
       price, 
       duration, 
       paymentMethod,
@@ -133,6 +135,32 @@ export async function POST(req: NextRequest) {
       }
       // تحويل المدة إلى أيام
       const daysCount = parseInt((duration || '30').replace(/\D/g, '')) || 30;
+
+      // إنشاء سجل اشتراك مبدئي في جدول subscriptions ليظهر في إدارة الاشتراكات
+      try {
+        const now = new Date();
+        const expiryDate = new Date(now.getTime() + daysCount * 24 * 60 * 60 * 1000);
+
+        const { error: subInsertError } = await supabaseAdmin
+          .from('subscriptions')
+          .insert({
+            user_id: userId,
+            package_id: packageId || packageName,
+            package_name: packageName,
+            start_date: now.toISOString(),
+            expiry_date: expiryDate.toISOString(),
+            price: parseInt(price),
+            days_count: daysCount,
+            payment_method: paymentMethod || 'vodafone_cash',
+            status: 'pending'
+          });
+
+        if (subInsertError) {
+          console.error('Error inserting into subscriptions table (non-critical):', subInsertError);
+        }
+      } catch (subError) {
+        console.error('Exception inserting into subscriptions table (non-critical):', subError);
+      }
 
       // إعداد تفاصيل الطلب كـ JSON
       const requestDetails = {
