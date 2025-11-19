@@ -101,19 +101,39 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // إذا كان المستخدم على صفحة /login وهو مسجل دخولاً بالفعل، أعد توجيهه
+  // إذا كان المستخدم على صفحة /login وهو مسجل دخولاً بالفعل، أعد توجيهه حسب حالة الاشتراك والحالة
   if (request.nextUrl.pathname === '/login') {
     if (isAdmin) {
       return NextResponse.redirect(new URL('/admin', request.url))
     }
-    // لا تعتمد على الكوكيز فقط هنا لتجنب إعادة توجيه خاطئة
-    if (session) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-    // fallback: إذا كان لدينا loggedIn عبر الكوكيز، وجّه حسب حالة الاشتراك
+
+    // إذا كان لدينا جلسة دخول عبر الكوكيز، استخدم حالة الاشتراك من الكوكيز مباشرة
     if (hasCookieAuth) {
       const target = subStatusCookie === 'active' ? '/dashboard' : '/subscription'
       return NextResponse.redirect(new URL(target, request.url))
+    }
+
+    // إذا كان لدينا session من Supabase، استخدم حالة المستخدم من قاعدة البيانات
+    if (session) {
+      try {
+        const supabase = createMiddlewareClient({ req: request, res })
+        const { data: userData } = await supabase
+          .from('users')
+          .select('status, subscription_status')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        // إذا كان الحساب ما زال في الانتظار بعد الموافقة المبدئية
+        if (userData?.status === 'pending') {
+          return NextResponse.redirect(new URL('/waiting-approval', request.url))
+        }
+
+        const target = userData?.subscription_status === 'active' ? '/dashboard' : '/subscription'
+        return NextResponse.redirect(new URL(target, request.url))
+      } catch (loginRedirectError) {
+        console.error('Error determining login redirect target:', loginRedirectError)
+        // في حالة الخطأ، اسمح للمستخدم برؤية صفحة تسجيل الدخول بدلاً من كسر الواجهة
+      }
     }
   }
 
