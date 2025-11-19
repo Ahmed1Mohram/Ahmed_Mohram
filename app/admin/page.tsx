@@ -464,26 +464,12 @@ const handleApproveUser = async (userId: string) => {
     })
 
     if (adminResponse.ok) {
-      // ثانياً: استدعاء واجهة API الجديدة لتفعيل الحساب تلقائياً
-      try {
-        const activateResponse = await fetch('/api/approve-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId })
-        })
-        
-        if (activateResponse.ok) {
-          toast.success('تم قبول وتفعيل حساب المستخدم بنجاح')
-        } else {
-          toast.error('تم قبول المستخدم لكن هناك مشكلة في تفعيل الحساب')
-        }
-      } catch (activateError) {
-        console.error('Error activating user account:', activateError);
-        toast.error('تم قبول المستخدم لكن هناك مشكلة في تفعيل الحساب')
-      }
-      
+      // في هذا السيناريو نقوم بالموافقة على الحساب فقط، ويظل الاشتراك غير مفعل
+      toast.success('تم قبول المستخدم بنجاح، وسيتم تفعيل الاشتراك بعد مراجعة الدفع')
       // تحديث البيانات في الواجهة
       fetchData()
+    } else {
+      toast.error('فشل قبول المستخدم')
     }
   } catch (error) {
     console.error('Error approving user:', error);

@@ -90,12 +90,17 @@ export default function UserDetailPage() {
 
   const handleStatusChange = async (status: string) => {
     try {
+      const updates: any = { status }
+
+      // لا نقوم بتفعيل الاشتراك تلقائياً عند جعل الحالة "approved"
+      // فقط نجبر الاشتراك على أن يكون غير نشط للحالات الأخرى مثل الرفض أو الحظر
+      if (status !== 'approved') {
+        updates.subscription_status = 'inactive'
+      }
+
       const { error } = await supabase
         .from('users')
-        .update({ 
-          status,
-          subscription_status: status === 'approved' ? 'active' : 'inactive'
-        })
+        .update(updates)
         .eq('id', userId)
 
       if (error) throw error

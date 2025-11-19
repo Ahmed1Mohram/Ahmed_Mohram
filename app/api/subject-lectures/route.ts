@@ -125,7 +125,15 @@ export async function GET(req: NextRequest) {
     }, { status: 200 })
 
   } catch (e: any) {
-    console.error('خطأ غير متوقع في واجهة API المحاضرات:', e)
-    return NextResponse.json({ error: 'فشل جلب المحاضرات', details: e.message }, { status: 500 })
+    console.error('خطأ غير متوقع في واجهة API المحاضرات، سيتم إرجاع قائمة فارغة:', e)
+
+    // حتى في حالة الأخطاء غير المتوقعة، لا نرجع 500 حتى لا تنكسر صفحة الطالب
+    return NextResponse.json({ 
+      lectures: [],
+      count: 0,
+      source: 'catch_fallback',
+      error: 'تعذر جلب المحاضرات حالياً، سيتم عرض قائمة فارغة',
+      details: e?.message || String(e)
+    }, { status: 200 })
   }
 }

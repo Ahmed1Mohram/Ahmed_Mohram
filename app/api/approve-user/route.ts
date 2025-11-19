@@ -61,14 +61,14 @@ export async function POST(req: NextRequest) {
       subscription_status: 'inactive',
       updated_at: new Date().toISOString()
     }
-    
+
     const { data: updatedUser, error: updateError } = await supabaseAdmin
       .from('users')
       .update(updateData)
       .eq('id', userId)
       .select()
       .single()
-      
+
     if (updateError) {
       console.error('خطأ في تحديث حالة المستخدم:', updateError);
       console.error('Complete error object:', JSON.stringify(updateError));
@@ -77,18 +77,7 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       )
     }
-    
-    try {
-      const daysCount = 30
-      const packageName = (userData as any).package_name || 'باقة الشهر الواحد'
-      const activated = await activateSubscription(userId, daysCount, packageName)
-      if (!activated) {
-        console.error('فشل تفعيل الاشتراك عند الموافقة على المستخدم:', { userId })
-      }
-    } catch (activationError) {
-      console.error('خطأ أثناء تفعيل الاشتراك بعد الموافقة:', activationError)
-    }
-    
+
     // إرسال إشعار للمستخدم
     await supabaseAdmin
       .from('notifications')
