@@ -57,14 +57,27 @@ const StudentStats = () => {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      // تجهيز بيانات المستخدم ليتم إرسالها في الهيدرز
-      const userData = localStorage.getItem('user');
-      
+      // تجهيز معرف المستخدم ليتم إرساله في الهيدرز (بدون بيانات عربية تكسر الهيدرز)
+      const rawUserData = localStorage.getItem('user');
+      let userId = '';
+
+      if (rawUserData) {
+        try {
+          const parsed = JSON.parse(rawUserData);
+          userId = parsed?.id || '';
+        } catch {}
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (userId) {
+        headers['x-user-id'] = userId;
+      }
+
       const response = await fetch('/api/student-stats', {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-data': userData || ''
-        }
+        headers,
       });
       
       if (!response.ok) {

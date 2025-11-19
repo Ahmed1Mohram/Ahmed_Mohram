@@ -177,16 +177,34 @@ export async function POST(req: NextRequest) {
     if (userDevices.some((d: any) => d.is_banned)) {
       return NextResponse.json({ success: false, allowed: false, message: 'أجهزتك محظورة' }, { status: 403 })
     }
-    
-    // إذا لم يكن الجهاز مسجلاً من قبل ولديه بالفعل جهاز آخر، رفض الوصول
+
+    // إذا لم يكن الجهاز مسجلاً من قبل ولديه بالفعل جهاز/أجهزة أخرى، قم بتسجيله واسمح بالوصول
     if (!registeredDevice && userDevices.length > 0) {
+      try {
+        await supabaseAdmin
+          .from('device_tracking')
+          .insert({
+            user_id: userId,
+            device_fingerprint: currentDeviceFingerprint,
+            device_info: {
+              userAgent: req.headers.get('user-agent'),
+              platform: req.headers.get('sec-ch-ua-platform'),
+              mobile: req.headers.get('sec-ch-ua-mobile')
+            },
+            ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
+            is_banned: false,
+            last_active: new Date().toISOString()
+          })
+      } catch {}
+
       return NextResponse.json({
-        success: false,
-        allowed: false,
-        message: 'غير مسموح بتسجيل الدخول من هذا الجهاز. يمكنك استخدام حسابك فقط على جهازك الأصلي.'
-      }, { status: 403 })
+        success: true,
+        allowed: true,
+        isFirstDevice: false,
+        message: 'تم السماح بالوصول (جهاز جديد)' ,
+      })
     }
-    
+
     // إذا كان الجهاز مسجلاً، تحديث آخر وقت نشاط
     if (registeredDevice) {
       await supabaseAdmin
@@ -197,7 +215,7 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', registeredDevice.id)
     }
-    
+
     return NextResponse.json({
       success: true,
       allowed: true,
