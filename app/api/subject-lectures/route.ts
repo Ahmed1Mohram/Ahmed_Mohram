@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/db-client' // نستخدم supabaseAdmin مباشرة هنا
-import { supabase } from '@/components/providers' // مكتبة العميل العادية للمحاولة البديلة
 
 /**
  * واجهة API محسّنة لجلب محاضرات موضوع معين
@@ -101,36 +100,23 @@ export async function GET(req: NextRequest) {
         source: 'admin_api'
       })
     }
-    
-    // الطريقة الرابعة: محاولة أخيرة باستخدام supabase العادي
-    console.log('استخدام supabase العادي للمحاولة الأخيرة')
-    
-    const { data: clientData, error: clientError } = await supabase
-      .from('lectures')
-      .select('*')
-      .eq('subject_id', subjectId)
-      .order('order_index')
-    
-    if (clientError) {
-      return NextResponse.json({ 
-        error: 'فشل جلب المحاضرات بعد عدة محاولات', 
-        details: {
-          functionError: functionError?.message,
-          sqlError: sqlError?.message,
-          adminError: adminError?.message,
-          clientError: clientError.message
-        }
-      }, { status: 500 })
-    }
-    
-    console.log(`تم جلب ${clientData?.length || 0} محاضرة للموضوع ${subjectId} باستخدام supabase العادي`)
-    
-    return NextResponse.json({ 
-      lectures: clientData || [],
-      count: clientData?.length || 0,
-      source: 'client_api'
+
+    // إذا فشلت كل المحاولات السابقة، أعد خطأ موحد مع تفاصيل المحاولات
+    console.error('فشل جلب المحاضرات بعد عدة محاولات', {
+      functionError,
+      sqlError,
+      adminError,
     })
-    
+
+    return NextResponse.json({ 
+      error: 'فشل جلب المحاضرات بعد عدة محاولات', 
+      details: {
+        functionError: functionError?.message,
+        sqlError: sqlError?.message,
+        adminError: adminError?.message,
+      }
+    }, { status: 500 })
+
   } catch (e: any) {
     console.error('خطأ غير متوقع في واجهة API المحاضرات:', e)
     return NextResponse.json({ error: 'فشل جلب المحاضرات', details: e.message }, { status: 500 })
