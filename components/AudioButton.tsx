@@ -13,11 +13,11 @@ const AudioButton = () => {
     // التحقق من وجود ملفات صوت مختلفة
     const checkFiles = async () => {
       const filesToCheck = [
-        '/audio/welcome-sound.mp3',
+        '/audio/منصه-enhanced-v2.wav',
         '/audio/welcome.mp3',
-        '/welcome-sound.mp3',
         '/welcome.mp3',
-        '/audio/منصه-enhanced-v2.wav'
+        '/welcome-sound.mp3',
+        '/audio/welcome-sound.mp3',
       ];
       
       for (const file of filesToCheck) {

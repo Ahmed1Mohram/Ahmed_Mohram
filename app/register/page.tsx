@@ -143,7 +143,7 @@ export default function RegisterPage() {
       localStorage.setItem('showWelcome', 'true');
       
       // التوجيه لصفحة الاشتراكات لعرض كروت الباقات مباشرة
-      setShowSuccessCard(true);
+      router.push('/subscription');
     } catch (error: any) {
       console.error('خطأ في التسجيل:', error);
       let errorMessage = 'حدث خطأ في التسجيل. تأكد من اتصالك بالإنترنت.';

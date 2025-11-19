@@ -104,21 +104,25 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // إذا فشلت كل المحاولات السابقة، أعد خطأ موحد مع تفاصيل المحاولات
-    console.error('فشل جلب المحاضرات بعد عدة محاولات', {
+    // إذا فشلت كل المحاولات السابقة، لا نُسقط الواجهة بخطأ 500
+    // بدلاً من ذلك نرجع قائمة محاضرات فارغة مع تفاصيل للمطور فقط
+    console.error('فشل جلب المحاضرات بعد عدة محاولات، سيتم إرجاع قائمة فارغة', {
       functionError,
       sqlError,
       adminError,
     })
 
     return NextResponse.json({ 
-      error: 'فشل جلب المحاضرات بعد عدة محاولات', 
+      lectures: [],
+      count: 0,
+      source: 'fallback_empty',
+      error: 'تعذر جلب المحاضرات، سيتم عرض قائمة فارغة', 
       details: {
         functionError: functionError?.message,
         sqlError: sqlError?.message,
         adminError: adminError?.message,
       }
-    }, { status: 500 })
+    }, { status: 200 })
 
   } catch (e: any) {
     console.error('خطأ غير متوقع في واجهة API المحاضرات:', e)
