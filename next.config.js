@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     swcMinify: false,
-    outputFileTracing: false,
     experimental: {
         serverActions: {
             bodySizeLimit: '10mb'
