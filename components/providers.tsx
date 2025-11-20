@@ -347,6 +347,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         document.cookie = 'role=' + encodeURIComponent(result.user.role || 'student') + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
         document.cookie = 'status=' + encodeURIComponent(result.user.status || 'approved') + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
         document.cookie = 'subscription_status=' + encodeURIComponent(result.user.subscription_status || 'inactive') + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+        // حفظ معرف المستخدم في الكوكيز ليستخدمه الـ middleware في التحقق من الاشتراك من قاعدة البيانات
+        if (result.user.id) {
+          document.cookie = 'user_id=' + encodeURIComponent(result.user.id) + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+          console.log('تم حفظ user_id في الكوكيز للميدل وير:', result.user.id);
+        }
         console.log('تم حفظ Cookies الجلسة (loggedIn/role/status/subscription_status)');
         
         setUser(result.user);
@@ -384,6 +389,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       document.cookie = 'role=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
       document.cookie = 'status=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
       document.cookie = 'subscription_status=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
+      document.cookie = 'user_id=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
       
       setUser(null)
       setIsAdmin(false)

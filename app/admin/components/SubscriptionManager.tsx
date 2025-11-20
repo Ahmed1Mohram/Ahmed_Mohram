@@ -72,6 +72,7 @@ export default function SubscriptionManager() {
   const [showModal, setShowModal] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
   const [daysChange, setDaysChange] = useState(0);
+  const [quickDays, setQuickDays] = useState<{ [id: string]: number }>({});
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -172,7 +173,8 @@ export default function SubscriptionManager() {
         body: JSON.stringify({ 
           id: selectedSubscription.id, 
           addDays: true, 
-          daysChange: daysChange 
+          daysChange: daysChange,
+          status: selectedSubscription.status 
         })
       });
       
@@ -192,6 +194,49 @@ export default function SubscriptionManager() {
       }
     } catch (error) {
       console.error('Error updating subscription days:', error);
+      toast.error('حدث خطأ أثناء تعديل مدة الاشتراك');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // تعديل سريع لعدد الأيام من الجدول (+/-) بدون فتح النافذة
+  const quickChangeSubscriptionDays = async (subscription: Subscription, delta: number) => {
+    if (!delta) return;
+
+    const confirmMsg = delta > 0
+      ? `هل تريد إضافة ${Math.abs(delta)} يوم إلى مدة الاشتراك؟`
+      : `هل تريد إنقاص ${Math.abs(delta)} يوم من مدة الاشتراك؟`;
+
+    const confirmed = window.confirm(confirmMsg);
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: subscription.id,
+          addDays: true,
+          daysChange: delta,
+          status: subscription.status
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          toast.success(`تم ${delta > 0 ? 'إضافة' : 'إنقاص'} ${Math.abs(delta)} يوم للاشتراك`);
+          fetchSubscriptions();
+        } else {
+          toast.error(data.error || 'حدث خطأ في تعديل مدة الاشتراك');
+        }
+      } else {
+        toast.error('فشل في تعديل مدة الاشتراك');
+      }
+    } catch (error) {
+      console.error('Error updating subscription days (quick):', error);
       toast.error('حدث خطأ أثناء تعديل مدة الاشتراك');
     } finally {
       setLoading(false);
@@ -327,11 +372,53 @@ export default function SubscriptionManager() {
                   <div className="text-white/50 text-xs">تاريخ الانتهاء</div>
                 </td>
                 <td className="py-3 px-4">
-                  {subscription.days_left > 0 ? (
-                    <div className="font-medium text-green-500">{subscription.days_left} يوم</div>
-                  ) : (
-                    <div className="font-medium text-red-500">منتهي</div>
-                  )}
+                  <div className="flex flex-col gap-1">
+                    {subscription.days_left > 0 ? (
+                      <div className="font-medium text-green-500">{subscription.days_left} يوم</div>
+                    ) : (
+                      <div className="font-medium text-red-500">منتهي</div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-1 text-xs mt-1">
+                      <input
+                        type="number"
+                        value={quickDays[subscription.id] ?? ''}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          setQuickDays((prev) => ({ ...prev, [subscription.id]: value }));
+                        }}
+                        className="w-20 px-2 py-1 rounded border border-white/20 bg-black/40 text-white text-xs"
+                        placeholder="عدد الأيام"
+                      />
+                      <button
+                        onClick={() => {
+                          const value = quickDays[subscription.id] || 0;
+                          if (!value) {
+                            toast.error('يرجى إدخال عدد الأيام أولاً');
+                            return;
+                          }
+                          quickChangeSubscriptionDays(subscription, value);
+                        }}
+                        className="px-2 py-0.5 rounded-full border border-green-500/60 text-green-400 hover:bg-green-500/10 disabled:opacity-50"
+                        disabled={loading}
+                      >
+                        + الأيام
+                      </button>
+                      <button
+                        onClick={() => {
+                          const value = quickDays[subscription.id] || 0;
+                          if (!value) {
+                            toast.error('يرجى إدخال عدد الأيام أولاً');
+                            return;
+                          }
+                          quickChangeSubscriptionDays(subscription, -value);
+                        }}
+                        className="px-2 py-0.5 rounded-full border border-red-500/60 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                        disabled={loading}
+                      >
+                        - الأيام
+                      </button>
+                    </div>
+                  </div>
                 </td>
                 <td className="py-3 px-4">
                   {subscription.status === 'active' ? (
@@ -390,10 +477,10 @@ export default function SubscriptionManager() {
                       </button>
                     )}
                     
-                    {/* زر إنهاء الاشتراك */}
-                    {subscription.status !== 'expired' && (
+                    {/* زر إنهاء الاشتراك (إلغاء الاشتراك الحالي وإرجاع المستخدم كأنه جديد بدون باقة) */}
+                    {subscription.status !== 'cancelled' && (
                       <button 
-                        onClick={() => updateSubscriptionStatus(subscription.id, 'expired')}
+                        onClick={() => updateSubscriptionStatus(subscription.id, 'cancelled')}
                         className="p-2 rounded-lg hover:bg-red-500/20 text-red-500 transition-colors tooltip-container"
                         title="إنهاء الاشتراك"
                       >

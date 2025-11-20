@@ -183,6 +183,25 @@ export async function POST(req: NextRequest) {
       allowPlatformAccess = false // علامة للسماح بدخول المنصة
     } = await req.json()
     
+    // التأكد من وجود الأعمدة الأساسية في جدول الاشتراكات لتجنب أخطاء مخطط Supabase
+    try {
+      await supabaseAdmin.rpc('exec', {
+        sql: `
+          ALTER TABLE public.subscriptions
+            ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS days_count INTEGER,
+            ADD COLUMN IF NOT EXISTS price INTEGER,
+            ADD COLUMN IF NOT EXISTS payment_method TEXT,
+            ADD COLUMN IF NOT EXISTS transaction_id TEXT,
+            ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ DEFAULT NOW(),
+            ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+            ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        `
+      })
+    } catch (ensureError) {
+      console.log('Non-critical: failed to ensure subscriptions columns', ensureError)
+    }
+    
     // إذا كان تعديل على اشتراك موجود
     if (id) {
       // جلب الاشتراك الحالي
@@ -200,7 +219,7 @@ export async function POST(req: NextRequest) {
       }
       
       // تحديث تاريخ الانتهاء إذا تم تغيير عدد الأيام
-      let expiryDate = new Date(currentSub.expiry_date)
+      let expiryDate = currentSub.expiry_date ? new Date(currentSub.expiry_date) : new Date()
       if (addDays && daysChange !== 0) {
         expiryDate.setDate(expiryDate.getDate() + daysChange)
       }

@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       successResponse.cookies.set('role', encodeURIComponent(sessionData.user.role || 'admin'), { path: '/', maxAge, sameSite: 'lax' })
       successResponse.cookies.set('status', encodeURIComponent(sessionData.user.status || 'approved'), { path: '/', maxAge, sameSite: 'lax' })
       successResponse.cookies.set('subscription_status', encodeURIComponent(sessionData.user.subscription_status || 'active'), { path: '/', maxAge, sameSite: 'lax' })
+      successResponse.cookies.set('user_id', sessionData.user.id, { path: '/', maxAge, sameSite: 'lax' })
       return successResponse
     }
     
@@ -172,6 +173,7 @@ export async function POST(req: NextRequest) {
         successResponse.cookies.set('role', encodeURIComponent(sessionData.user.role || 'student'), { path: '/', maxAge, sameSite: 'lax' })
         successResponse.cookies.set('status', encodeURIComponent(sessionData.user.status || 'pending'), { path: '/', maxAge, sameSite: 'lax' })
         successResponse.cookies.set('subscription_status', encodeURIComponent(sessionData.user.subscription_status || 'inactive'), { path: '/', maxAge, sameSite: 'lax' })
+        successResponse.cookies.set('user_id', sessionData.user.id, { path: '/', maxAge, sameSite: 'lax' })
         return successResponse
       } else {
         // إذا لم يتم العثور على المستخدم أو حدث خطأ في الاستعلام

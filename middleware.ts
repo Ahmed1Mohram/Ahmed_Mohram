@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { supabaseAdmin } from '@/lib/db-client'
 
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next()
@@ -157,7 +158,57 @@ export async function middleware(request: NextRequest) {
     const isAllowedWithoutSub = isPublicPath || isSubscriptionPage || isWaitingPage
     const isProtectedPath = !isAllowedWithoutSub
 
-    if (isProtectedPath && subStatusCookie !== 'active') {
+    // إذا كانت الصفحة غير محمية، لا داعي لفحص الاشتراك
+    if (!isProtectedPath) {
+      return res
+    }
+
+    // محاولة قراءة حالة الاشتراك الفعلية من قاعدة البيانات إذا كان لدينا user_id
+    let effectiveSubStatus = subStatusCookie
+    const userIdCookie = request.cookies.get('user_id')?.value || null
+
+    if (userIdCookie) {
+      try {
+        const { data: userRow, error: userRowError } = await supabaseAdmin
+          .from('users')
+          .select('subscription_status, subscription_end_date')
+          .eq('id', userIdCookie)
+          .maybeSingle()
+
+        if (!userRowError && userRow) {
+          effectiveSubStatus = userRow.subscription_status || subStatusCookie
+
+          // إذا كانت الحالة Active لكن تاريخ الانتهاء قد مضى، نعتبرها منتهية
+          if (userRow.subscription_status === 'active' && userRow.subscription_end_date) {
+            const endDate = new Date(userRow.subscription_end_date)
+            const now = new Date()
+            if (endDate < now) {
+              effectiveSubStatus = 'expired'
+
+              // محاولة تحديث قاعدة البيانات للحفاظ على التزامن (بدون كسر الطلب في حالة الفشل)
+              try {
+                await supabaseAdmin
+                  .from('users')
+                  .update({ subscription_status: 'expired', updated_at: now.toISOString() })
+                  .eq('id', userIdCookie)
+              } catch (updateErr) {
+                console.error('Error auto-updating expired subscription for cookie user:', updateErr)
+              }
+            }
+          }
+        }
+      } catch (subStatusError) {
+        console.error('Error checking subscription status for cookie user:', subStatusError)
+      }
+    }
+
+    console.log('Cookie subscription effective status:', {
+      userIdCookie,
+      cookieStatus: subStatusCookie,
+      effectiveSubStatus
+    })
+
+    if (effectiveSubStatus !== 'active') {
       console.log('Cookie subscription check failed - redirecting to subscription with warning');
       const url = new URL('/subscription', request.url)
       url.searchParams.set('warn', '1')

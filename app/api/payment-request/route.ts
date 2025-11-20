@@ -68,8 +68,8 @@ export async function POST(req: NextRequest) {
         
         // إنشاء اسم ملف فريد
         const timestamp = Date.now();
-        const fileExt = receipt.name.split('.').pop() || 'jpg';
-        const fileName = `receipts/${userId}_${timestamp}.${fileExt}`;
+        const fileExt = receipt.name.split('.').pop() || 'jpg'; 
+        const fileName = `receipts/${userId}_${timestamp}.${fileExt}`; 
         
         // رفع الصورة إلى التخزين
         const { data: uploadData, error: uploadError } = await supabaseAdmin
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     // حفظ بيانات الطلب في جدول بديل بسيط
     try {
-      // التأكد من وجود جدول subscription_requests والأعمدة اللازمة في users
+      // التأكد من وجود جدول subscription_requests وجدول subscriptions والأعمدة اللازمة في users
       try {
         await supabaseAdmin.rpc('exec', {
           sql: `
@@ -128,32 +128,79 @@ export async function POST(req: NextRequest) {
               ADD COLUMN IF NOT EXISTS package_name TEXT,
               ADD COLUMN IF NOT EXISTS amount INTEGER,
               ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+
+            -- إنشاء جدول الاشتراكات إذا لم يكن موجوداً
+            CREATE TABLE IF NOT EXISTS public.subscriptions (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID NOT NULL,
+              package_id TEXT,
+              package_name TEXT NOT NULL,
+              price INTEGER NOT NULL,
+              days_count INTEGER,
+              start_date TIMESTAMPTZ DEFAULT NOW(),
+              expiry_date TIMESTAMPTZ NOT NULL,
+              status TEXT DEFAULT 'pending',
+              payment_method TEXT,
+              transaction_id TEXT,
+              created_at TIMESTAMPTZ DEFAULT NOW(),
+              updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            -- ضمان وجود الأعمدة الأساسية حتى لو كان الجدول قديماً (مثلاً كان يحتوي فقط على end_date بدون package_name أو expiry_date)
+            ALTER TABLE public.subscriptions
+              ADD COLUMN IF NOT EXISTS package_name TEXT,
+              ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMPTZ DEFAULT NOW(),
+              ADD COLUMN IF NOT EXISTS days_count INTEGER,
+              ADD COLUMN IF NOT EXISTS price INTEGER,
+              ADD COLUMN IF NOT EXISTS payment_method TEXT,
+              ADD COLUMN IF NOT EXISTS transaction_id TEXT,
+              ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ DEFAULT NOW(),
+              ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+              ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(),
+              ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ;
+
+            ALTER TABLE public.subscriptions
+              ALTER COLUMN end_date DROP NOT NULL;
+
+            -- إعادة تحميل مخطط PostgREST حتى يتعرف على الأعمدة الجديدة (لتفادي أخطاء schema cache)
+            SELECT pg_notify('pgrst', 'reload schema');
           `
         });
       } catch (ensureError) {
-        console.log('Non-critical: failed to ensure subscription_requests/users columns schema', ensureError);
+        console.log('Non-critical: failed to ensure subscription_requests/users/subscriptions schema', ensureError);
       }
       // تحويل المدة إلى أيام
       const daysCount = parseInt((duration || '30').replace(/\D/g, '')) || 30;
 
       // إنشاء سجل اشتراك مبدئي في جدول subscriptions ليظهر في إدارة الاشتراكات
+      // باستخدام exec لتجنب مشاكل مخطط PostgREST مع الحقول الجديدة مثل days_count
       try {
         const now = new Date();
         const expiryDate = new Date(now.getTime() + daysCount * 24 * 60 * 60 * 1000);
 
-        const { error: subInsertError } = await supabaseAdmin
-          .from('subscriptions')
-          .insert({
-            user_id: userId,
-            package_id: packageId || packageName,
-            package_name: packageName,
-            start_date: now.toISOString(),
-            expiry_date: expiryDate.toISOString(),
-            price: parseInt(price),
-            days_count: daysCount,
-            payment_method: paymentMethod || 'vodafone_cash',
-            status: 'pending'
-          });
+        const safeSubPackageId = escapeLiteral((packageId || packageName) as string);
+        const safeSubPackageName = escapeLiteral(packageName);
+        const safeSubPaymentMethod = escapeLiteral(paymentMethod || 'vodafone_cash');
+
+        const insertSubSql = `
+          INSERT INTO public.subscriptions
+            (user_id, package_id, package_name, price, days_count, start_date, expiry_date, status, payment_method, created_at, updated_at)
+          VALUES (
+            '${userId}'::uuid,
+            '${safeSubPackageId}',
+            '${safeSubPackageName}',
+            ${parseInt(price)},
+            ${daysCount},
+            '${now.toISOString()}'::timestamptz,
+            '${expiryDate.toISOString()}'::timestamptz,
+            'pending',
+            '${safeSubPaymentMethod}',
+            NOW(),
+            NOW()
+          );
+        `;
+
+        const { error: subInsertError } = await supabaseAdmin.rpc('exec', { sql: insertSubSql });
 
         if (subInsertError) {
           console.error('Error inserting into subscriptions table (non-critical):', subInsertError);

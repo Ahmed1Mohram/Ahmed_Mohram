@@ -485,7 +485,6 @@ const updateStats = (usersData: User[]) => {
 
 const handleApproveUser = async (userId: string) => {
   try {
-    // أولاً: استدعاء واجهة API الموجودة للحفاظ على توافق النظام
     const adminResponse = await fetch('/api/admin/approve-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -493,9 +492,7 @@ const handleApproveUser = async (userId: string) => {
     })
 
     if (adminResponse.ok) {
-      // في هذا السيناريو نقوم بالموافقة على الحساب فقط، ويظل الاشتراك غير مفعل
-      toast.success('تم قبول المستخدم بنجاح، وسيتم تفعيل الاشتراك بعد مراجعة الدفع')
-      // تحديث البيانات في الواجهة
+      toast.success('تم قبول المستخدم بنجاح، وسيتم تفعيل الاشتراك من إدارة الاشتراكات')
       fetchData()
     } else {
       toast.error('فشل قبول المستخدم')
@@ -981,6 +978,15 @@ const handleUnbanUser = async (userId: string) => {
               animate={{ opacity: 1 }}
               className="space-y-6"
             >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold gradient-text">إدارة اشتراكات المستخدمين</h2>
+                <button
+                  onClick={() => router.push('/admin/subscriptions')}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-gold to-yellow-500 text-black font-bold hover:shadow-lg hover:shadow-gold/40 transition-all"
+                >
+                  صفحة الاشتراكات فقط
+                </button>
+              </div>
               <SubscriptionManager />
             </motion.div>
           )}

@@ -33,11 +33,62 @@ export async function checkSubscriptionStatus(userId: string): Promise<Subscript
       console.error('Error fetching user subscription data:', userError);
       return { active: false, status: 'inactive' };
     }
+    
+    // استخدام حالة المستخدم كنقطة بداية
+    let status: 'active' | 'inactive' | 'expired' | 'pending' = userData.subscription_status;
+    let subscriptionEndDate: string | undefined = userData.subscription_end_date || undefined;
+    let packageName: string | undefined = userData.package_name || undefined;
 
-    // التحقق من انتهاء الاشتراك
-    const isActive = userData.subscription_status === 'active';
-    const endDate = userData.subscription_end_date ? new Date(userData.subscription_end_date) : null;
+    // محاولة الحصول على أحدث اشتراك فعّال من جدول الاشتراكات لمزامنة الحالة
+    try {
+      const { data: subRows, error: subError } = await supabaseAdmin
+        .from('subscriptions')
+        .select('status, expiry_date, package_name')
+        .eq('user_id', userId)
+        .order('expiry_date', { ascending: false })
+        .limit(1);
+
+      if (!subError && subRows && subRows.length > 0) {
+        const latestSub = subRows[0] as { status: string; expiry_date: string | null; package_name?: string | null };
+        const nowForSub = new Date();
+        const subEnd = latestSub.expiry_date ? new Date(latestSub.expiry_date) : null;
+
+        if (latestSub.status === 'active' && subEnd && subEnd > nowForSub) {
+          status = 'active';
+          subscriptionEndDate = latestSub.expiry_date || undefined;
+          if (latestSub.package_name) {
+            packageName = latestSub.package_name || packageName;
+          }
+
+          // مزامنة حالة المستخدم مع جدول الاشتراكات إذا كانت مختلفة
+          if (
+            userData.subscription_status !== 'active' ||
+            userData.subscription_end_date !== subscriptionEndDate ||
+            userData.package_name !== packageName
+          ) {
+            try {
+              await supabaseAdmin
+                .from('users')
+                .update({
+                  subscription_status: 'active',
+                  subscription_end_date: subscriptionEndDate,
+                  package_name: packageName,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', userId);
+            } catch (syncError) {
+              console.error('Error syncing user subscription from subscriptions table:', syncError);
+            }
+          }
+        }
+      }
+    } catch (subCheckError) {
+      console.error('Error checking subscriptions table for user:', subCheckError);
+    }
+
+    // التحقق من انتهاء الاشتراك بناءً على التاريخ النهائي الحالي
     const now = new Date();
+    const endDate = subscriptionEndDate ? new Date(subscriptionEndDate) : null;
     
     // حساب الأيام المتبقية
     let daysLeft = 0;
@@ -46,11 +97,10 @@ export async function checkSubscriptionStatus(userId: string): Promise<Subscript
       daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     }
     
-    // التحقق مما إذا كان الاشتراك منتهيًا
-    let status = userData.subscription_status;
-    let active = isActive;
-    
-    if (isActive && endDate && endDate < now) {
+    let active = status === 'active';
+
+    // إذا كان مسجل كـ active لكن التاريخ انتهى، نعتبره منتهيًا ونحدّث قاعدة البيانات
+    if (active && endDate && endDate < now) {
       status = 'expired';
       active = false;
       
@@ -71,9 +121,9 @@ export async function checkSubscriptionStatus(userId: string): Promise<Subscript
     return {
       active,
       status,
-      subscription_end_date: userData.subscription_end_date,
+      subscription_end_date: subscriptionEndDate,
       days_left: daysLeft,
-      package_name: userData.package_name
+      package_name: packageName
     };
     
   } catch (error) {

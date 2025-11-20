@@ -26,6 +26,7 @@ export default function SubscriptionPage() {
 
   // حالة الاشتراك للمستخدم الحالي
   const [subscriptionStatus, setSubscriptionStatus] = useState<{ active: boolean; status: string; days_left?: number } | null>(null)
+  const [showRenewOverlay, setShowRenewOverlay] = useState(true)
 
   // إنذار عند محاولة الدخول لمحتوى مدفوع بدون اشتراك
   useEffect(() => {
@@ -432,23 +433,66 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {subscriptionStatus && subscriptionStatus.status === 'expired' && (
-          <div className="max-w-3xl mx-auto mb-10">
-            <div className="luxury-card rounded-2xl p-6 border-2 border-red-500/60 bg-red-950/40">
-              <div className="flex items-start gap-4">
-                <div className="mt-1">
-                  <Clock className="w-8 h-8 text-red-400" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">انتهى اشتراكك</h2>
-                  <p className="text-white/80 mb-2">
-                    انتهت مدة اشتراكك في المنصة. لإعادة الوصول لجميع المحاضرات والمحتوى، يرجى اختيار باقة وتجديد الاشتراك.
-                  </p>
-                  {typeof subscriptionStatus.days_left === 'number' && subscriptionStatus.days_left <= 0 && (
-                    <p className="text-white/60 text-sm">
-                      لن تتمكن من استخدام المنصة إلا بعد تجديد الاشتراك.
-                    </p>
+        {subscriptionStatus && subscriptionStatus.status === 'expired' && showRenewOverlay && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/90 px-4">
+            <div className="max-w-xl w-full">
+              <div className="relative rounded-3xl p-8 sm:p-10 bg-gradient-to-br from-amber-500 via-yellow-400 to-rose-200 text-black shadow-[0_0_45px_rgba(0,0,0,0.8)] border border-amber-200/80 overflow-hidden">
+                <div className="absolute -top-24 -left-24 w-52 h-52 bg-amber-300/40 rounded-full blur-3xl" />
+                <div className="absolute -bottom-32 -right-20 w-56 h-56 bg-rose-200/40 rounded-full blur-3xl" />
+
+                <div className="relative z-10 flex flex-col gap-4">
+                  <div className="flex flex-col items-center text-center gap-3">
+                    <div className="w-16 h-16 rounded-full bg-white/30 flex items-center justify-center shadow-inner shadow-black/20">
+                      <Clock className="w-9 h-9 text-black" />
+                    </div>
+                    <div>
+                      <h2 className="text-3xl sm:text-4xl font-extrabold mb-1 tracking-tight">
+                        انتهى اشتراكك في المنصّة
+                      </h2>
+                      <p className="text-black/80 text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
+                        انتهت مدة اشتراكك الحالي، ولا يمكن مشاهدة المحتوى المدفوع حتى تقوم بتجديد الاشتراك.
+                        اختر باقة جديدة الآن لتستعيد الوصول الكامل لكل المحاضرات والمراجعات.
+                      </p>
+                    </div>
+                  </div>
+
+                  {typeof window !== 'undefined' && (
+                    <div className="grid sm:grid-cols-3 gap-3 mt-2">
+                      <button
+                        onClick={() => {
+                          setShowRenewOverlay(false)
+                          if (typeof document !== 'undefined') {
+                            const el = document.getElementById('packages-section')
+                            if (el) {
+                              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                            }
+                          }
+                        }}
+                        className="col-span-2 py-3.5 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-300 text-black font-extrabold text-lg shadow-lg shadow-black/40 hover:shadow-[0_0_25px_rgba(248,113,113,0.8)] transition-all flex items-center justify-center gap-2"
+                      >
+                        <Crown className="w-6 h-6" />
+                        تجديد الاشتراك الآن
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const whatsappNumber = '201005209667'
+                          const message = encodeURIComponent('انتهى اشتراكي وأرغب في تجديد الاشتراك، من فضلك ساعدني في اختيار الباقة المناسبة.')
+                          if (typeof window !== 'undefined') {
+                            window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank')
+                          }
+                        }}
+                        className="py-3.5 rounded-2xl bg-black/70 text-white border border-white/15 hover:bg-black/90 hover:border-white/30 transition-all text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        <MessageCircle className="w-5 h-5" />
+                        تواصل معنا
+                      </button>
+                    </div>
                   )}
+
+                  <div className="mt-3 text-center text-xs sm:text-sm text-black/70">
+                    <p>محاولات فتح المحتوى بدون اشتراك تعرّض حسابك للحظر. يرجى تجديد الاشتراك قبل المتابعة.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -457,7 +501,7 @@ export default function SubscriptionPage() {
 
         {/* Packages Grid */}
         {(!subscriptionStatus || subscriptionStatus.status !== 'active') && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+          <div id="packages-section" className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
             {loading ? (
               // حالة التحميل
               Array(4).fill(0).map((_, index) => (
