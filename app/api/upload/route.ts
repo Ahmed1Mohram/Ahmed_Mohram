@@ -126,10 +126,13 @@ export async function POST(req: NextRequest) {
       }
     }
     
+    const arrayBuffer = await file.arrayBuffer()
+    const fileBuffer = new Uint8Array(arrayBuffer)
+
     // رفع الملف إلى الـ bucket المحدد
     const { data, error: upErr } = await supabaseAdmin.storage
       .from(bucketName)
-      .upload(path, file, {
+      .upload(path, fileBuffer, {
         cacheControl: '3600',
         upsert: true, // السماح بالاستبدال لتجنب أخطاء الأسماء المتكررة
         contentType: detectedContentType,

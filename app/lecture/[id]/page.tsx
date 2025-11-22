@@ -38,6 +38,61 @@ interface Lecture {
   lecture_content?: LectureContent[]
 }
 
+function getGoogleDrivePreviewUrl(rawUrl?: string | null): string {
+  if (!rawUrl) return ''
+  let url = rawUrl.trim()
+
+  // في حال تم إدخال الرابط بدون http
+  if (!/^https?:\/\//i.test(url) && url.includes('drive.google.com')) {
+    url = 'https://' + url.replace(/^\/+/, '')
+  }
+
+  try {
+    const u = new URL(url)
+    if (!u.hostname.includes('drive.google.com')) return url
+
+    let fileId: string | null = null
+
+    // أنماط شائعة:
+    // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+    // https://drive.google.com/open?id=FILE_ID
+    // https://drive.google.com/uc?export=download&id=FILE_ID
+    const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)/)
+    if (fileMatch && fileMatch[1]) {
+      fileId = fileMatch[1]
+    } else {
+      const idParam = u.searchParams.get('id')
+      if (idParam) fileId = idParam
+    }
+
+    if (fileId) {
+      return `https://drive.google.com/file/d/${fileId}/preview`
+    }
+  } catch (e) {
+    // نرجع الرابط الأصلي في حال أي خطأ في التحليل
+  }
+
+  return url
+}
+
+function getGoogleDriveDirectUrl(rawUrl?: string | null): string {
+  const previewUrl = getGoogleDrivePreviewUrl(rawUrl)
+  if (!previewUrl) return ''
+
+  try {
+    const u = new URL(previewUrl)
+    const match = u.pathname.match(/\/file\/d\/([^/]+)/)
+    if (match && match[1]) {
+      const fileId = match[1]
+      return `https://drive.google.com/uc?export=download&id=${fileId}`
+    }
+  } catch (e) {
+    // في حالة أي خطأ نرجع نفس الرابط
+  }
+
+  return previewUrl
+}
+
 export default function LecturePage() {
   const router = useRouter()
   const params = useParams()
@@ -211,10 +266,17 @@ export default function LecturePage() {
       toast.error('هذا المحتوى غير قابل للتحميل')
       return
     }
-    
-    if (content.content_url) {
+    const url = content.content_url || ''
+    const isGoogleDrive = url.includes('drive.google.com')
+
+    if (isGoogleDrive) {
+      toast.error('لا يمكن تحميل هذا المحتوى مباشرة من المنصة')
+      return
+    }
+
+    if (url) {
       if (typeof window !== 'undefined') {
-        window.open(content.content_url, '_blank')
+        window.open(url, '_blank')
         toast.success('جاري تحميل الملف...')
       }
     }
@@ -303,8 +365,10 @@ export default function LecturePage() {
                     className="w-full h-full"
                   >
                     {selectedContent.type === 'video' && (
-                      <div className="w-full h-full flex items-center justify-center bg-black">
-                        {(() => {
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-black via-gray-950 to-black">
+                        <div className="relative w-full max-w-5xl aspect-video rounded-3xl overflow-hidden border border-gold/40 shadow-[0_0_45px_rgba(212,175,55,0.35)] bg-black">
+                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-gold/15 via-transparent to-yellow-500/10" />
+                          {(() => {
                           const url = selectedContent.content_url || ''
                           const isYouTube = url.includes('youtube.com') || url.includes('youtu.be')
                           if (isYouTube) {
@@ -327,7 +391,20 @@ export default function LecturePage() {
                             return (
                               <iframe
                                 src={embedUrl}
-                                className="w-full h-full"
+                                className="w-full h-full object-contain bg-black"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            )
+                          }
+
+                          const isGoogleDrive = url.includes('drive.google.com')
+                          if (isGoogleDrive) {
+                            const embedUrl = getGoogleDrivePreviewUrl(url)
+                            return (
+                              <iframe
+                                src={embedUrl}
+                                className="w-full h-full object-contain bg-black"
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowFullScreen
                               />
@@ -336,14 +413,15 @@ export default function LecturePage() {
 
                           return (
                             <video
-                              src={selectedContent.content_url}
+                              src={selectedContent.content_url || ''}
                               controls
-                              className="w-full h-full"
+                              className="w-full h-full object-contain bg-black"
                               onPlay={() => setIsPlaying(true)}
                               onPause={() => setIsPlaying(false)}
                             />
                           )
                         })()}
+                        </div>
                       </div>
                     )}
 
@@ -374,7 +452,7 @@ export default function LecturePage() {
                           >
                             عرض الملف
                           </button>
-                          {selectedContent.is_downloadable && (
+                          {selectedContent.is_downloadable && !(selectedContent.content_url && selectedContent.content_url.includes('drive.google.com')) && (
                             <button
                               onClick={() => handleDownload(selectedContent)}
                               className="px-6 py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
@@ -389,8 +467,8 @@ export default function LecturePage() {
 
                     {/* Audio Player */}
                     {selectedContent.type === 'audio' && (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center">
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-black via-gray-950 to-black">
+                        <div className="w-full max-w-2xl mx-auto luxury-card rounded-3xl p-8 bg-gradient-to-br from-black via-gray-900 to-black border border-gold/40 shadow-[0_0_45px_rgba(212,175,55,0.35)] text-center">
                           <div className="mb-8">
                             <motion.div
                               animate={{ scale: isPlaying ? [1, 1.2, 1] : 1 }}
@@ -404,13 +482,35 @@ export default function LecturePage() {
                               {selectedContent.duration_minutes ? `${selectedContent.duration_minutes} دقيقة` : 'تسجيل صوتي'}
                             </p>
                           </div>
-                          <audio
-                            src={selectedContent.content_url}
-                            controls
-                            className="w-full max-w-md"
-                            onPlay={() => setIsPlaying(true)}
-                            onPause={() => setIsPlaying(false)}
-                          />
+                          {(() => {
+                            const url = selectedContent.content_url || ''
+                            const isGoogleDrive = url.includes('drive.google.com')
+                            if (isGoogleDrive) {
+                              const embedUrl = getGoogleDrivePreviewUrl(url)
+                              return (
+                                <div className="relative w-full mt-6">
+                                  <iframe
+                                    src={embedUrl}
+                                    className="w-full rounded-2xl bg-black"
+                                    allow="autoplay"
+                                  />
+                                  <div className="absolute top-2 right-2 z-10 w-14 h-14 rounded-full bg-gradient-to-br from-gold to-yellow-500 shadow-lg flex items-center justify-center text-black">
+                                    <Award className="w-7 h-7" />
+                                  </div>
+                                </div>
+                              )
+                            }
+
+                            return (
+                              <audio
+                                src={url}
+                                controls
+                                className="w-full mt-6"
+                                onPlay={() => setIsPlaying(true)}
+                                onPause={() => setIsPlaying(false)}
+                              />
+                            )
+                          })()}
                         </div>
                       </div>
                     )}
@@ -477,7 +577,7 @@ export default function LecturePage() {
                               {content.duration_minutes} دقيقة
                             </p>
                           )}
-                          {content.is_downloadable && (
+                          {content.is_downloadable && !(content.content_url && content.content_url.includes('drive.google.com')) && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -502,16 +602,16 @@ export default function LecturePage() {
       {/* PDF Viewer Modal */}
       {showPdfViewer && selectedContent?.type === 'pdf' && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-6xl h-full max-h-[90vh] bg-white rounded-lg overflow-hidden">
+          <div className="relative w-full max-w-6xl h-full max-h-[90vh] rounded-3xl overflow-hidden border border-gold/40 bg-gradient-to-br from-black via-gray-900 to-black shadow-[0_0_45px_rgba(212,175,55,0.45)]">
             <button
               onClick={() => setShowPdfViewer(false)}
-              className="absolute top-4 right-4 z-10 p-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-red-500 text-white hover:bg-red-600 shadow-lg"
             >
               <X className="w-5 h-5" />
             </button>
             <iframe
-              src={selectedContent.content_url}
-              className="w-full h-full"
+              src={getGoogleDrivePreviewUrl(selectedContent.content_url || '')}
+              className="w-full h-full bg-black"
               title="PDF Viewer"
             />
           </div>
